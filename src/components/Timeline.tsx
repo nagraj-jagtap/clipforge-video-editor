@@ -1,9 +1,5 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
 import React, { useEffect, useRef, useState } from 'react';
-import { Scissors, Trash2, Copy, ZoomIn, ZoomOut, Magnet, Video, Music, Type, Smile, ChevronRight, ChevronLeft, Plus, X, Wand2, Layers3, Sparkles, UserRound, Check } from 'lucide-react';
+import { Scissors, Trash2, Copy, ZoomIn, ZoomOut, Magnet, Video, Music, Type, Smile, ChevronRight, ChevronLeft, Wand2, Layers3, Sparkles, UserRound } from 'lucide-react';
 import { TimelineClip, TimelineTrack } from '../types';
 import { formatTimecode } from '../utils/videoExporter';
 
@@ -82,8 +78,8 @@ const iconForTrack = (type: TimelineTrack['type']) => type === 'video' ? <Video 
 export const Timeline: React.FC<TimelineProps> = (props) => {
   const { tracks, clips, currentTime, duration, selectedClipId, onSelectClip, onSeek, onUpdateClips, onSplitClip, onTrimClipStart, onTrimClipEnd, onDuplicateClip, onDeleteClip } = props;
   const [zoom, setZoom] = useState(60); const [snap, setSnap] = useState(true); const [dragId, setDragId] = useState<string | null>(null); const [dragX, setDragX] = useState(0); const [dragTime, setDragTime] = useState(0);
-  const [trim, setTrim] = useState<{ id: string; side: 'start' | 'end' } | null>(null); const [toolTab, setToolTab] = useState<ToolTab>('transitions'); const [category, setCategory] = useState('All'); const [effectsTargetId, setEffectsTargetId] = useState<string | null>(null);
-  const bodyRef = useRef<HTMLDivElement>(null); const timelineWidth = Math.max(900, duration * zoom + 220); const target = clips.find(c => c.id === effectsTargetId) || clips.find(c => c.id === selectedClipId) || null;
+  const [trim, setTrim] = useState<{ id: string; side: 'start' | 'end' } | null>(null); const [toolTab, setToolTab] = useState<ToolTab>('transitions'); const [category, setCategory] = useState('All');
+  const bodyRef = useRef<HTMLDivElement>(null); const timelineWidth = Math.max(900, duration * zoom + 220); const selectedClip = clips.find(c => c.id === selectedClipId) || null; const showEffects = !!selectedClip && (selectedClip.type === 'video' || selectedClip.type === 'image');
 
   useEffect(() => {
     const move = (e: MouseEvent) => {
@@ -94,18 +90,16 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
   }, [dragId, trim, dragX, dragTime, zoom, snap, currentTime, clips, onUpdateClips]);
 
   const apply = (id: string) => {
-    if (!target) return;
-    if (toolTab === 'body') onUpdateClips(clips.map(c => c.id === target.id ? { ...c, bodyEffect: id } : c));
-    else if (toolTab === 'transitions') onUpdateClips(clips.map(c => c.id === target.id ? { ...c, transition: id as TimelineClip['transition'], transitionDuration: id === 'none' ? 0 : .5 } : c));
-    else onUpdateClips(clips.map(c => c.id === target.id ? { ...c, effect: id as TimelineClip['effect'], effectIntensity: id === 'none' ? 0 : 50 } : c));
-    onSelectClip(target.id);
+    if (!selectedClip || !showEffects) return;
+    if (toolTab === 'body') onUpdateClips(clips.map(c => c.id === selectedClip.id ? { ...c, bodyEffect: id } : c));
+    else if (toolTab === 'transitions') onUpdateClips(clips.map(c => c.id === selectedClip.id ? { ...c, transition: id as TimelineClip['transition'], transitionDuration: id === 'none' ? 0 : .5 } : c));
+    else onUpdateClips(clips.map(c => c.id === selectedClip.id ? { ...c, effect: id as TimelineClip['effect'], effectIntensity: id === 'none' ? 0 : 50 } : c));
   };
 
   const categories = toolTab === 'transitions' ? transitionCategories : toolTab === 'video' ? videoCategories : bodyCategories;
   const visibleCategories = category === 'All' ? categories : categories.filter(c => c.name === category);
-  const targetImage = target?.thumbnail || '';
 
-  return <div className="h-[330px] bg-[#12141A] border-t border-[#222733] flex flex-col shrink-0 select-none overflow-hidden z-20 relative">
+  return <div className={`${showEffects ? 'h-[330px]' : 'h-[180px]'} bg-[#12141A] border-t border-[#222733] flex flex-col shrink-0 select-none overflow-hidden z-20 relative transition-[height] duration-150`}>
     <div className="h-10 bg-[#171B24] border-b border-[#222733] px-3 flex items-center justify-between shrink-0">
       <div className="flex items-center gap-1">
         <button onClick={onSplitClip} className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#1F2430] hover:bg-[#00F0FF] hover:text-[#0B0D12] text-xs font-semibold text-white"><Scissors className="w-3.5 h-3.5"/>Split</button>
@@ -123,10 +117,10 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
       </div>
     </div>
 
-    <div className="h-[150px] border-t border-[#222733] bg-[#10131A] flex flex-col shrink-0">
-      <div className="h-9 flex items-center gap-1 px-2 border-b border-[#222733]"><button onClick={()=>{setToolTab('transitions');setCategory('All')}} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold ${toolTab==='transitions'?'bg-[#00F0FF]/15 text-[#00F0FF]':'text-[#94A3B8]'}`}><Layers3 className="w-3.5 h-3.5"/>Transitions</button><button onClick={()=>{setToolTab('video');setCategory('All')}} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold ${toolTab==='video'?'bg-[#00F0FF]/15 text-[#00F0FF]':'text-[#94A3B8]'}`}><Wand2 className="w-3.5 h-3.5"/>Video Effects</button><button onClick={()=>{setToolTab('body');setCategory('All')}} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold ${toolTab==='body'?'bg-[#00F0FF]/15 text-[#00F0FF]':'text-[#94A3B8]'}`}><UserRound className="w-3.5 h-3.5"/>Body Effects</button><span className="ml-auto text-[9px] text-[#64748B]">{target ? `Target: ${target.name}` : 'Select a clip to apply'}</span></div>
+    {showEffects && <div className="h-[150px] border-t border-[#222733] bg-[#10131A] flex flex-col shrink-0">
+      <div className="h-9 flex items-center gap-1 px-2 border-b border-[#222733]"><button onClick={()=>{setToolTab('transitions');setCategory('All')}} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold ${toolTab==='transitions'?'bg-[#00F0FF]/15 text-[#00F0FF]':'text-[#94A3B8]'}`}><Layers3 className="w-3.5 h-3.5"/>Transitions</button><button onClick={()=>{setToolTab('video');setCategory('All')}} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold ${toolTab==='video'?'bg-[#00F0FF]/15 text-[#00F0FF]':'text-[#94A3B8]'}`}><Wand2 className="w-3.5 h-3.5"/>Video Effects</button><button onClick={()=>{setToolTab('body');setCategory('All')}} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold ${toolTab==='body'?'bg-[#00F0FF]/15 text-[#00F0FF]':'text-[#94A3B8]'}`}><UserRound className="w-3.5 h-3.5"/>Body Effects</button><span className="ml-auto text-[9px] text-[#64748B]">{selectedClip ? `Target: ${selectedClip.name}` : ''}</span></div>
       <div className="h-7 flex items-center gap-1 px-2 overflow-x-auto">{['All',...categories.map(c=>c.name)].map(x=><button key={x} onClick={()=>setCategory(x)} className={`px-2 py-1 rounded text-[8px] whitespace-nowrap ${category===x?'bg-[#273244] text-white':'text-[#64748B] hover:text-white'}`}>{x}</button>)}</div>
-      <div className="flex-1 overflow-x-auto overflow-y-hidden px-2 pb-2"><div className="flex gap-2 min-w-max">{visibleCategories.flatMap(c=>c.items).map((item,i)=><button key={`${item.name}-${i}`} onClick={()=>item.id&&apply(item.id)} disabled={!target} className={`w-[112px] h-[74px] rounded-lg border p-2 text-left shrink-0 transition ${!target?'opacity-50 cursor-not-allowed':'hover:border-[#00F0FF]/70'} ${(target?.transition===item.id||target?.effect===item.id||target?.bodyEffect===item.id)?'border-[#00F0FF] bg-[#00F0FF]/10':'border-[#262C3A] bg-[#171B24]'}`}><div className="h-7 rounded bg-gradient-to-br from-[#202A3A] to-[#0B0D12] mb-1.5 flex items-center justify-center">{toolTab==='body'?<UserRound className="w-4 h-4 text-[#F472B6]"/>:toolTab==='transitions'?<Layers3 className="w-4 h-4 text-[#38BDF8]"/>:<Sparkles className="w-4 h-4 text-[#A78BFA]"/>}</div><div className="text-[9px] text-white font-semibold truncate">{item.name}</div><div className="text-[7px] text-[#64748B] truncate">{item.desc}</div></button>)}</div></div>
-    </div>
+      <div className="flex-1 overflow-x-auto overflow-y-hidden px-2 pb-2"><div className="flex gap-2 min-w-max">{visibleCategories.flatMap(c=>c.items).map((item,i)=><button key={`${item.name}-${i}`} onClick={()=>item.id&&apply(item.id)} className={`w-[112px] h-[74px] rounded-lg border p-2 text-left shrink-0 transition hover:border-[#00F0FF]/70 ${(selectedClip?.transition===item.id||selectedClip?.effect===item.id||selectedClip?.bodyEffect===item.id)?'border-[#00F0FF] bg-[#00F0FF]/10':'border-[#262C3A] bg-[#171B24]'}`}><div className="h-7 rounded bg-gradient-to-br from-[#202A3A] to-[#0B0D12] mb-1.5 flex items-center justify-center">{toolTab==='body'?<UserRound className="w-4 h-4 text-[#F472B6]"/>:toolTab==='transitions'?<Layers3 className="w-4 h-4 text-[#38BDF8]"/>:<Sparkles className="w-4 h-4 text-[#A78BFA]"/>}</div><div className="text-[9px] text-white font-semibold truncate">{item.name}</div><div className="text-[7px] text-[#64748B] truncate">{item.desc}</div></button>)}</div></div>
+    </div>}
   </div>;
 };
