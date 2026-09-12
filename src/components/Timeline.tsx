@@ -95,37 +95,72 @@ export const Timeline: React.FC<TimelineProps> = ({ tracks, clips, currentTime, 
     onSelectClip(clipId);
   };
 
+  const previewClassForTransition = (id: TimelineClip['transition']) => `cf-transition-preview cf-${id}`;
+
   return (
     <div className="h-64 bg-[#12141A] border-t border-[#222733] flex flex-col shrink-0 select-none overflow-hidden z-20 relative">
-      {/* CapCut-style + menu: Transitions + Effects */}
+      <style>{`
+        @keyframes cfFadeIn { 0%,35%{opacity:0} 65%,100%{opacity:1} }
+        @keyframes cfDissolve { 0%,20%{opacity:0;filter:blur(5px)} 55%{opacity:.55;filter:blur(1px)} 100%{opacity:1;filter:blur(0)} }
+        @keyframes cfSlideL { 0%{transform:translateX(100%);opacity:0} 45%,100%{transform:translateX(0);opacity:1} }
+        @keyframes cfSlideR { 0%{transform:translateX(-100%);opacity:0} 45%,100%{transform:translateX(0);opacity:1} }
+        @keyframes cfZoom { 0%{transform:scale(.35);opacity:0} 55%,100%{transform:scale(1);opacity:1} }
+        @keyframes cfWipe { 0%{clip-path:inset(0 100% 0 0)} 55%,100%{clip-path:inset(0 0 0 0)} }
+        @keyframes cfFlash { 0%,38%{opacity:0} 45%{opacity:1} 52%,100%{opacity:0} }
+        @keyframes cfBlur { 0%{filter:blur(9px);opacity:.2} 65%,100%{filter:blur(0);opacity:1} }
+        @keyframes cfSpin { 0%{transform:rotate(-70deg) scale(.45);opacity:0} 65%,100%{transform:rotate(0) scale(1);opacity:1} }
+        .cf-preview-stage{position:relative;height:46px;border-radius:7px;overflow:hidden;background:linear-gradient(135deg,#202A3A,#0B0D12);border:1px solid #303A4C}
+        .cf-preview-a,.cf-preview-b{position:absolute;inset:7px;width:42%;border-radius:4px;background:linear-gradient(135deg,#38BDF8,#7C3AED)}
+        .cf-preview-b{left:auto;right:7px;background:linear-gradient(135deg,#F97316,#EC4899);opacity:.9}
+        .cf-preview-main{position:absolute;inset:7px;left:50%;width:42%;border-radius:4px;background:linear-gradient(135deg,#00F0FF,#2563EB);transform-origin:center}
+        .cf-fade .cf-preview-main{animation:cfFadeIn 1.2s infinite}
+        .cf-dissolve .cf-preview-main{animation:cfDissolve 1.2s infinite}
+        .cf-slideLeft .cf-preview-main{animation:cfSlideL 1.2s infinite}
+        .cf-slideRight .cf-preview-main{animation:cfSlideR 1.2s infinite}
+        .cf-zoom .cf-preview-main{animation:cfZoom 1.2s infinite}
+        .cf-wipe .cf-preview-main{animation:cfWipe 1.2s infinite}
+        .cf-flash .cf-preview-main{animation:cfFlash 1.2s infinite}
+        .cf-blur .cf-preview-main{animation:cfBlur 1.2s infinite}
+        .cf-spin .cf-preview-main{animation:cfSpin 1.2s infinite}
+        .cf-none .cf-preview-main{display:none}
+        .cf-transition-plus{box-shadow:0 0 0 0 rgba(0,240,255,.5);animation:cfPlusPulse 1.7s infinite}
+        @keyframes cfPlusPulse{0%,100%{box-shadow:0 0 0 0 rgba(0,240,255,0)}50%{box-shadow:0 0 0 5px rgba(0,240,255,.08)}}
+      `}</style>
+
       {effectsTargetId && (
-        <div className="absolute top-10 right-3 z-50 w-[330px] max-h-[245px] overflow-y-auto rounded-xl border border-[#334155] bg-[#11151D] shadow-2xl shadow-black/60 p-3">
+        <div className="absolute top-10 right-3 z-50 w-[350px] max-h-[calc(100%-48px)] overflow-y-auto rounded-xl border border-[#334155] bg-[#11151D] shadow-2xl shadow-black/60 p-3">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-xs font-bold text-white">Add to clip</p>
-              <p className="text-[9px] text-[#64748B]">Transitions & Effects</p>
+              <p className="text-[9px] text-[#64748B]">Premium-style Transitions & Effects</p>
             </div>
             <button onClick={() => setEffectsTargetId(null)} className="p-1 rounded hover:bg-[#222733] text-[#94A3B8] hover:text-white"><X className="w-3.5 h-3.5" /></button>
           </div>
 
           <div className="mb-3">
-            <div className="flex items-center gap-1.5 mb-2 text-[#00F0FF]"><LayersIcon /><span className="text-[11px] font-bold">Transitions</span></div>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="flex items-center gap-1.5 mb-2 text-[#00F0FF]"><LayersIcon /><span className="text-[11px] font-bold">Transitions</span><span className="text-[8px] text-[#64748B] ml-auto">Animated preview</span></div>
+            <div className="grid grid-cols-2 gap-2">
               {CREATOR_TRANSITIONS.map((trans) => {
                 const target = clips.find((c) => c.id === effectsTargetId);
                 const active = target?.transition === trans.id;
-                return <button key={trans.id} onClick={() => applyTransition(effectsTargetId, trans.id)} className={`p-1.5 rounded-lg border text-center transition-all ${active ? 'bg-[#00F0FF]/15 border-[#00F0FF] text-[#00F0FF]' : 'bg-[#171B24] border-[#262C3A] text-white hover:border-[#00F0FF]/60'}`}><div className="text-sm">{trans.icon}</div><div className="text-[8px] font-semibold truncate">{trans.name}</div></button>;
+                return <button key={trans.id} onClick={() => applyTransition(effectsTargetId, trans.id)} className={`p-1.5 rounded-lg border text-left transition-all ${active ? 'bg-[#00F0FF]/15 border-[#00F0FF] text-[#00F0FF]' : 'bg-[#171B24] border-[#262C3A] text-white hover:border-[#00F0FF]/60'}`}>
+                  <div className={previewClassForTransition(trans.id)}><div className="cf-preview-a"/><div className="cf-preview-b"/><div className="cf-preview-main"/></div>
+                  <div className="mt-1 flex items-center gap-1"><span className="text-sm">{trans.icon}</span><span className="text-[9px] font-semibold truncate">{trans.name}</span></div>
+                </button>;
               })}
             </div>
           </div>
 
           <div className="pt-3 border-t border-[#222733]">
-            <div className="flex items-center gap-1.5 mb-2 text-[#00F0FF]"><Wand2 className="w-3.5 h-3.5" /><span className="text-[11px] font-bold">Effects</span></div>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="flex items-center gap-1.5 mb-2 text-[#00F0FF]"><Wand2 className="w-3.5 h-3.5" /><span className="text-[11px] font-bold">Effects</span><span className="text-[8px] text-[#64748B] ml-auto">Animated preview</span></div>
+            <div className="grid grid-cols-2 gap-2">
               {CREATOR_EFFECTS.map((effect) => {
                 const target = clips.find((c) => c.id === effectsTargetId);
                 const active = target?.effect === effect.id;
-                return <button key={effect.id} onClick={() => applyEffect(effectsTargetId, effect.id)} className={`p-1.5 rounded-lg border text-center transition-all ${active ? 'bg-[#00F0FF]/15 border-[#00F0FF] text-[#00F0FF]' : 'bg-[#171B24] border-[#262C3A] text-white hover:border-[#00F0FF]/60'}`}><div className="text-sm">{effect.icon}</div><div className="text-[8px] font-semibold truncate">{effect.name}</div></button>;
+                return <button key={effect.id} onClick={() => applyEffect(effectsTargetId, effect.id)} className={`p-1.5 rounded-lg border text-left transition-all ${active ? 'bg-[#00F0FF]/15 border-[#00F0FF] text-[#00F0FF]' : 'bg-[#171B24] border-[#262C3A] text-white hover:border-[#00F0FF]/60'}`}>
+                  <div className="cf-preview-stage"><div className="cf-preview-a"/><div className="cf-preview-b"/><div className="absolute inset-0 flex items-center justify-center text-lg">{effect.icon}</div></div>
+                  <div className="mt-1 text-[9px] font-semibold truncate">{effect.name}</div>
+                </button>;
               })}
             </div>
           </div>
@@ -173,7 +208,7 @@ export const Timeline: React.FC<TimelineProps> = ({ tracks, clips, currentTime, 
                         <div className="flex items-center gap-1.5 px-2 w-full h-full overflow-hidden">{clip.thumbnail && <img src={clip.thumbnail} alt={clip.name} referrerPolicy="no-referrer" className="h-full aspect-video object-cover rounded pointer-events-none" />}<span className="text-[11px] font-semibold text-white truncate drop-shadow-sm">{clip.type === 'text' ? clip.text || clip.name : clip.name}</span>{clip.effect && clip.effect !== 'none' && <Sparkles className="w-3 h-3 text-[#00F0FF] shrink-0" title="Effect applied" />}<span className="text-[9px] font-mono text-white/70 ml-auto shrink-0">{clip.duration.toFixed(1)}s</span></div>
                         <div onMouseDown={(e) => { e.stopPropagation(); setTrimmingHandle({ clipId: clip.id, type: 'end' }); }} className="absolute right-0 top-0 bottom-0 w-2.5 bg-white/20 hover:bg-[#00F0FF] cursor-ew-resize opacity-0 group-hover:opacity-100 z-20 flex items-center justify-center"><div className="w-0.5 h-3 bg-white rounded-full" /></div>
                       </div>
-                      {hasJunction && <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setEffectsTargetId(nextClip.id); }} className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 w-6 h-6 rounded-full bg-[#1B2430] border-2 border-[#CBD5E1] hover:border-[#00F0FF] hover:bg-[#00F0FF] hover:text-[#0B0D12] text-white flex items-center justify-center shadow-lg transition-all" style={{ left: `${junctionLeft}px` }} title="Transitions & Effects"><Plus className="w-3.5 h-3.5" /></button>}
+                      {hasJunction && <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setEffectsTargetId(nextClip.id); }} className="cf-transition-plus absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 w-6 h-6 rounded-full bg-[#1B2430] border-2 border-[#CBD5E1] hover:border-[#00F0FF] hover:bg-[#00F0FF] hover:text-[#0B0D12] text-white flex items-center justify-center shadow-lg transition-all" style={{ left: `${junctionLeft}px` }} title="Transitions & Effects"><Plus className="w-3.5 h-3.5" /></button>}
                     </React.Fragment>;
                   })}
                 </div>;
