@@ -1,0 +1,39 @@
+name: Fix text editing
+on:
+  push:
+    paths:
+      - .github/workflows/fix-text-edit.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, 'Fix direct text editing on timeline')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Timeline
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/components/Timeline.tsx')
+          s=p.read_text()
+          old="const bodyRef = useRef<HTMLDivElement>(null); const timelineWidth = Math.max(900, duration * zoom + 220); const selectedClip = clips.find(c => c.id === selectedClipId) || null; const showEffects = !!selectedClip && (selectedClip.type === 'video' || selectedClip.type === 'image');"
+          new="const bodyRef = useRef<HTMLDivElement>(null); const [editingTextId, setEditingTextId] = useState<string | null>(null); const timelineWidth = Math.max(900, duration * zoom + 220); const selectedClip = clips.find(c => c.id === selectedClipId) || null; const showEffects = !!selectedClip && (selectedClip.type === 'video' || selectedClip.type === 'image');"
+          if old not in s: raise SystemExit('state anchor missing')
+          s=s.replace(old,new)
+          old="<span className=\"text-[10px] text-white font-semibold truncate\">{c.type==='text'?c.text||c.name:c.name}</span>"
+          new="{c.type==='text' && editingTextId===c.id ? <input autoFocus value={c.text||''} onChange={e=>onUpdateClips(clips.map(x=>x.id===c.id?{...x,text:e.target.value,name:e.target.value||'Text'}:x))} onBlur={()=>setEditingTextId(null)} onMouseDown={e=>e.stopPropagation()} onKeyDown={e=>{if(e.key==='Enter'||e.key==='Escape') setEditingTextId(null)}} className=\"min-w-0 flex-1 bg-[#0B0D12] border border-[#00F0FF] rounded px-1 text-[10px] text-white outline-none\" /> : <span onDoubleClick={e=>{e.stopPropagation();setEditingTextId(c.id);onSelectClip(c.id);}} className=\"text-[10px] text-white font-semibold truncate cursor-text\" title={c.type==='text'?'Double-click to edit':c.name}>{c.type==='text'?c.text||c.name:c.name}</span>}"
+          if old not in s: raise SystemExit('text anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+      - name: Build
+        run: |
+          npm install
+          npm run build
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/Timeline.tsx
+          git diff --cached --quiet || git commit -m 'Fix direct text editing on timeline'
+          git push
