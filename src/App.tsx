@@ -1,36 +1,353 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Upload, Play, Pause, Scissors, Trash2, RotateCcw, RotateCw, Download, Video, Music, Type, Sparkles, Wand2, SlidersHorizontal, Gauge, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { SidebarTab, AspectRatioType, MediaAsset, TimelineTrack, TimelineClip } from './types';
+import { INITIAL_MEDIA_ASSETS, INITIAL_CREATOR_TRACKS, INITIAL_CREATOR_CLIPS, DEFAULT_ADJUSTMENTS } from './data/creatorAssets';
+import { Header } from './components/Header';
+import { LeftSidebar } from './components/LeftSidebar';
+import { CenterPreview } from './components/CenterPreview';
+import { RightPanel } from './components/RightPanel';
+import { Timeline } from './components/Timeline';
+import { ExportModal } from './components/ExportModal';
 
-type Clip={id:string;name:string;url:string;duration:number;start:number;speed:number;filter:string;effect:string;transition:string};
-type EffectTab='transitions'|'video'|'body';
-const transitions=['Clean Cut','Fade to Black','Fade to White','Dissolve','Pull In / Pull Out','Whip Pan','Spin','Tilt Up / Down','Speed Ramp Push','Motion Blur Swipe','Zoom In / Out','Fast Forward Push','RGB Split','Glitch Wave','Static Noise','Pixelate Shift','Flicker','CRT Switch','Glare','Film Burn','Light Leak','Flash','Glow','Bloom','Circle Reveal','Star Reveal','Heart Reveal','Horizontal Banding','Blinds','3D Cube','Page Turn','Collage Swap','Flip Card'];
-const videoEffects=['Chromatic Blur','Edge Glow','Flash','Bokeh Lights','Soft Glow','Film Grain','VHS Glitch','Light Leaks','Dust Particles','Polaroid Frames','Retro Camera','Signal Interference','RGB Split','Pixelate','Fish-eye Distortion','Mirror','Rain','Snowfall','Smoke','Fire Rays','Lens Flare','Fog','Motion Blur','Radial Blur','Tilt-Shift Blur','Halo Blur','3D Zoom','Anime Style','Comic Book','Cyberpunk','Oil Painting Overlay'];
-const bodyEffects=['Electric Rays','Neon Glow Outline','Lightning Strokes','Laser Aura','Glowing Eyes','Halo Ring','Angel Wings','Demon Horns','Floating Crown','Disappearing Clone','Shadow Trail','RGB Echo','Speed Phantom','Super Saiyan Flame','Particle Burst','Galaxy Sparkles','Cosmic Pulse','Background Matrix','Fire Ring Behind','Grid Aura'];
-const filters=['Original','Cinematic','Vintage','Warm','Cool','Retro','B&W','Dramatic'];
-const filterCss:Record<string,string>={Original:'none',Cinematic:'contrast(1.18) saturate(1.25)',Vintage:'sepia(.35) contrast(1.1) saturate(.9)',Warm:'sepia(.18) saturate(1.3) hue-rotate(-8deg)',Cool:'saturate(.9) hue-rotate(15deg) brightness(1.05)',Retro:'contrast(1.12) saturate(1.25) sepia(.12)','B&W':'grayscale(1) contrast(1.08)',Dramatic:'contrast(1.3) saturate(1.12) brightness(.96)'};
+export default function App() {
+  const [projectName, setProjectName] = useState('Untitled Project');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioType>('9:16');
+  const [activeTab, setActiveTab] = useState<SidebarTab>('media');
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(INITIAL_MEDIA_ASSETS.filter(a => a.type !== 'audio'));
+  const [tracks] = useState<TimelineTrack[]>(INITIAL_CREATOR_TRACKS);
+  const [clips, setClips] = useState<TimelineClip[]>(INITIAL_CREATOR_CLIPS);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(INITIAL_CREATOR_CLIPS[0]?.id ?? null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLooping, setIsLooping] = useState(true);
+  const [historyStack, setHistoryStack] = useState<TimelineClip[][]>([]);
+  const [redoStack, setRedoStack] = useState<TimelineClip[][]>([]);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
-export default function App(){
- const inputRef=useRef<HTMLInputElement>(null),videoRef=useRef<HTMLVideoElement>(null);
- const [clips,setClips]=useState<Clip[]>([]),[selected,setSelected]=useState<string|null>(null),[playing,setPlaying]=useState(false),[time,setTime]=useState(0),[tab,setTab]=useState<EffectTab>('transitions'),[filter,setFilter]=useState('Original'),[brightness,setBrightness]=useState(0),[contrast,setContrast]=useState(0),[saturation,setSaturation]=useState(0),[speed,setSpeed]=useState(1),[zoom,setZoom]=useState(100),[rotation,setRotation]=useState(0);
- const clip=clips.find(c=>c.id===selected)||clips[0]||null;
- const duration=useMemo(()=>Math.max(1,...clips.map(c=>c.start+c.duration)),[clips]);
- useEffect(()=>{const v=videoRef.current;if(!v)return;const a=()=>setTime(v.currentTime),b=()=>setPlaying(false);v.addEventListener('timeupdate',a);v.addEventListener('ended',b);return()=>{v.removeEventListener('timeupdate',a);v.removeEventListener('ended',b)}},[clip?.url]);
- useEffect(()=>{if(videoRef.current)videoRef.current.playbackRate=speed},[speed]);
- const importFiles=(files:FileList|null)=>{if(!files)return;let start=clips.length?Math.max(...clips.map(c=>c.start+c.duration)):0;Array.from(files).forEach(file=>{if(!file.type.startsWith('video/'))return;const url=URL.createObjectURL(file),v=document.createElement('video');v.preload='metadata';v.src=url;v.onloadedmetadata=()=>{const d=Math.min(v.duration||5,60),c:Clip={id:crypto.randomUUID(),name:file.name,url,duration:d,start,speed:1,filter:'Original',effect:'none',transition:'none'};start+=d;setClips(p=>[...p,c]);setSelected(c.id)}})};
- const togglePlay=async()=>{const v=videoRef.current;if(!v)return;if(playing){v.pause();setPlaying(false)}else{await v.play();setPlaying(true)}};
- const seek=(t:number)=>{const v=videoRef.current;if(!v)return;const n=Math.max(0,Math.min(clip?.duration||duration,t));v.currentTime=n;setTime(n)};
- const split=()=>{if(!clip||time<=0||time>=clip.duration)return;const a={...clip,duration:time},b={...clip,id:crypto.randomUUID(),name:clip.name+' — Part 2',start:clip.start+time,duration:clip.duration-time};setClips(p=>p.flatMap(c=>c.id===clip.id?[a,b]:[c]));setSelected(b.id)};
- const remove=()=>{if(!selected)return;setClips(p=>p.filter(c=>c.id!==selected));setSelected(null);setPlaying(false)};
- const applyEffect=(name:string)=>{if(!clip)return;if(tab==='transitions')setClips(p=>p.map(c=>c.id===clip.id?{...c,transition:name}:c));else if(tab==='video')setClips(p=>p.map(c=>c.id===clip.id?{...c,effect:name}:c));else setClips(p=>p.map(c=>c.id===clip.id?{...c,effect:'BODY: '+name}:c))};
- const adjustment=`${filterCss[filter]||'none'} brightness(${1+brightness/100}) contrast(${1+contrast/100}) saturate(${1+saturation/100})`;
- return <div className="h-screen w-screen bg-[#0b0d12] text-white flex flex-col overflow-hidden font-sans">
-  <header className="h-12 shrink-0 border-b border-[#242936] bg-[#11141b] flex items-center px-4 gap-4"><div className="text-lg font-black">Clip<span className="text-cyan-400">Forge</span></div><div className="text-xs text-slate-500">Free Creator Video Editor</div><div className="ml-auto flex gap-2"><button onClick={()=>inputRef.current?.click()} className="px-3 py-1.5 rounded bg-cyan-400 text-black text-xs font-bold flex gap-1.5 items-center"><Upload size={14}/>Import</button><button onClick={()=>alert('Browser export renderer will be added next.')} className="px-3 py-1.5 rounded border border-[#303746] text-xs font-semibold flex gap-1.5 items-center"><Download size={14}/>Export</button><input ref={inputRef} type="file" accept="video/*" multiple hidden onChange={e=>importFiles(e.target.files)}/></div></header>
-  <main className="flex-1 min-h-0 grid grid-cols-[250px_minmax(0,1fr)_285px]">
-   <aside className="border-r border-[#242936] bg-[#10131a] flex flex-col min-h-0"><div className="p-3 border-b border-[#242936] text-xs font-bold uppercase text-slate-400">Media</div><div className="p-3 flex-1 overflow-auto space-y-2">{clips.length===0?<button onClick={()=>inputRef.current?.click()} className="w-full h-28 border border-dashed border-[#394150] rounded-lg text-slate-400 text-xs flex flex-col items-center justify-center gap-2 hover:border-cyan-400"><Plus size={20}/>Add your first video</button>:clips.map(c=><button key={c.id} onClick={()=>setSelected(c.id)} className={`w-full text-left rounded-lg p-2 border ${selected===c.id?'border-cyan-400 bg-cyan-400/10':'border-[#29303c] bg-[#171b23]'}`}><div className="h-20 rounded bg-black overflow-hidden mb-2"><video src={c.url} muted className="w-full h-full object-cover"/></div><div className="text-xs truncate">{c.name}</div><div className="text-[10px] text-slate-500">{c.duration.toFixed(1)}s</div></button>)}</div><div className="grid grid-cols-3 border-t border-[#242936]"><button className="p-3 text-[10px] text-slate-400 flex flex-col items-center gap-1"><Video size={15}/>Video</button><button className="p-3 text-[10px] text-slate-400 flex flex-col items-center gap-1"><Music size={15}/>Audio</button><button className="p-3 text-[10px] text-slate-400 flex flex-col items-center gap-1"><Type size={15}/>Text</button></div></aside>
-   <section className="min-w-0 flex flex-col bg-[#0c0f15]"><div className="flex-1 min-h-0 flex items-center justify-center p-6">{clip?<div className="max-h-full max-w-full aspect-video bg-black rounded-lg overflow-hidden border border-[#252b37]"><video ref={videoRef} src={clip.url} onClick={togglePlay} className="w-full h-full object-contain" style={{filter:adjustment,transform:`scale(${zoom/100}) rotate(${rotation}deg)`}}/></div>:<div className="text-center text-slate-500"><Sparkles className="mx-auto mb-3" size={34}/><div className="text-sm">Import a video to start editing</div></div>}</div><div className="h-14 shrink-0 border-t border-[#242936] flex items-center justify-center gap-3"><button onClick={()=>seek(time-.1)} className="p-2"><ChevronLeft size={17}/></button><button onClick={togglePlay} disabled={!clip} className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center disabled:opacity-30">{playing?<Pause size={16}/>:<Play size={16} fill="currentColor"/>}</button><button onClick={()=>seek(time+.1)} className="p-2"><ChevronRight size={17}/></button><span className="font-mono text-xs text-slate-400">{time.toFixed(2)} / {duration.toFixed(2)}</span></div></section>
-   <aside className="border-l border-[#242936] bg-[#10131a] min-h-0 flex flex-col"><div className="grid grid-cols-3 border-b border-[#242936]">{(['transitions','video','body'] as EffectTab[]).map(t=><button key={t} onClick={()=>setTab(t)} className={`py-3 text-[10px] font-bold uppercase ${tab===t?'text-cyan-300 border-b-2 border-cyan-400':'text-slate-500'}`}>{t==='video'?'Video FX':t==='body'?'Body FX':'Transitions'}</button>)}</div><div className="flex-1 overflow-auto p-3 space-y-2">{(tab==='transitions'?transitions:tab==='video'?videoEffects:bodyEffects).map(name=><button key={name} onClick={()=>applyEffect(name)} className="w-full text-left px-3 py-2.5 rounded border border-[#252c38] bg-[#151922] hover:border-cyan-400 hover:bg-cyan-400/10 text-xs flex items-center justify-between"><span>{name}</span><Wand2 size={13} className="text-slate-600"/></button>)}</div></aside>
-  </main>
-  <section className="h-[270px] shrink-0 border-t border-[#242936] bg-[#11141b] flex flex-col"><div className="h-10 border-b border-[#242936] flex items-center gap-1 px-3"><button onClick={split} className="px-2.5 py-1.5 rounded bg-[#1b202a] text-xs flex gap-1.5 items-center"><Scissors size={14}/>Split</button><button onClick={remove} className="px-2.5 py-1.5 rounded bg-[#1b202a] text-xs text-red-300 flex gap-1.5 items-center"><Trash2 size={14}/>Delete</button><button onClick={()=>setRotation(r=>r-90)} className="p-1.5 rounded bg-[#1b202a]"><RotateCcw size={14}/></button><button onClick={()=>setRotation(r=>r+90)} className="p-1.5 rounded bg-[#1b202a]"><RotateCw size={14}/></button><div className="ml-auto text-xs text-slate-500">Timeline • {clips.length} clips</div></div><div className="flex-1 min-h-0 overflow-auto p-3"><div className="min-w-[900px]"><div className="h-6 flex text-[10px] text-slate-600 font-mono border-b border-[#242936]">{Array.from({length:12},(_,i)=><span key={i} className="w-24">{i}s</span>)}</div><div className="mt-2 space-y-2">{clips.map(c=><button key={c.id} onClick={()=>setSelected(c.id)} className={`relative block h-12 rounded border text-left overflow-hidden ${selected===c.id?'border-cyan-400':'border-[#343b48]'} bg-[#1b2430]`} style={{marginLeft:c.start*60,width:Math.max(120,c.duration*60)}}><div className="absolute inset-0 opacity-35 bg-gradient-to-r from-cyan-500 to-blue-500"/><div className="relative px-2 py-1 text-[11px] font-semibold truncate">{c.name}</div><div className="relative px-2 text-[9px] text-slate-300">{c.effect!=='none'?c.effect:c.transition!=='none'?c.transition:'Video'}</div></button>)}</div></div></div></section>
-  <section className="h-40 shrink-0 border-t border-[#242936] bg-[#0e1117] px-4 py-3 grid grid-cols-4 gap-4"><div><div className="text-[10px] uppercase text-slate-500 mb-2 flex items-center gap-1"><SlidersHorizontal size={12}/>Filters</div><div className="flex flex-wrap gap-1">{filters.map(f=><button key={f} onClick={()=>setFilter(f)} className={`px-2 py-1 rounded text-[10px] ${filter===f?'bg-cyan-400 text-black':'bg-[#1b202a] text-slate-300'}`}>{f}</button>)}</div></div><div><div className="text-[10px] uppercase text-slate-500 mb-2">Adjust</div>{[['Brightness',brightness,setBrightness],['Contrast',contrast,setContrast],['Saturation',saturation,setSaturation]].map(([n,v,setter]:any)=><label key={n} className="flex items-center gap-2 text-[10px] text-slate-400 mb-2"><span className="w-16">{n}</span><input type="range" min="-100" max="100" value={v} onChange={e=>setter(Number(e.target.value))} className="flex-1 accent-cyan-400"/></label>)}</div><div><div className="text-[10px] uppercase text-slate-500 mb-2 flex items-center gap-1"><Gauge size={12}/>Speed</div><input type="range" min="0.25" max="4" step="0.25" value={speed} onChange={e=>setSpeed(Number(e.target.value))} className="w-full accent-cyan-400"/><div className="text-xs text-slate-300 mt-1">{speed}×</div><div className="flex gap-1 mt-2">{[.5,1,1.5,2,4].map(x=><button key={x} onClick={()=>setSpeed(x)} className="px-2 py-1 rounded bg-[#1b202a] text-[10px]">{x}×</button>)}</div></div><div><div className="text-[10px] uppercase text-slate-500 mb-2">Transform</div><label className="text-[10px] text-slate-400">Zoom <input type="range" min="50" max="160" value={zoom} onChange={e=>setZoom(Number(e.target.value))} className="w-full accent-cyan-400"/></label><div className="text-xs mt-1 text-slate-300">{zoom}% • {rotation}°</div><div className="mt-3 text-[10px] text-slate-500">No watermark • No premium lock</div></div></section>
- </div>
+  const duration = Math.max(1, ...clips.map(c => c.startTime + c.duration));
+  const selectedClip = clips.find(c => c.id === selectedClipId) ?? null;
+
+  const pushHistory = useCallback((snapshot: TimelineClip[]) => {
+    setHistoryStack(prev => [...prev.slice(-19), snapshot]);
+    setRedoStack([]);
+  }, []);
+
+  const updateClips = useCallback((next: TimelineClip[]) => {
+    setClips(prev => {
+      if (prev === next) return prev;
+      setHistoryStack(h => [...h.slice(-19), prev]);
+      setRedoStack([]);
+      return next;
+    });
+  }, []);
+
+  const updateSelectedClip = useCallback((updates: Partial<TimelineClip>) => {
+    if (!selectedClipId) return;
+    setClips(prev => {
+      setHistoryStack(h => [...h.slice(-19), prev]);
+      setRedoStack([]);
+      return prev.map(c => c.id === selectedClipId ? { ...c, ...updates } : c);
+    });
+  }, [selectedClipId]);
+
+  const undo = useCallback(() => {
+    setHistoryStack(prev => {
+      if (!prev.length) return prev;
+      const previous = prev[prev.length - 1];
+      setClips(current => {
+        setRedoStack(r => [current, ...r].slice(0, 20));
+        return previous;
+      });
+      return prev.slice(0, -1);
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setRedoStack(prev => {
+      if (!prev.length) return prev;
+      const next = prev[0];
+      setClips(current => {
+        setHistoryStack(h => [...h.slice(-19), current]);
+        return next;
+      });
+      return prev.slice(1);
+    });
+  }, []);
+
+  useEffect(() => {
+    let frame = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const delta = (now - last) / 1000;
+      last = now;
+      if (isPlaying) {
+        setCurrentTime(t => {
+          const next = t + delta;
+          if (next >= duration) {
+            if (isLooping) return 0;
+            setIsPlaying(false);
+            return duration;
+          }
+          return next;
+        });
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [isPlaying, duration, isLooping]);
+
+  const seek = useCallback((time: number) => {
+    setCurrentTime(Math.max(0, Math.min(duration, time)));
+  }, [duration]);
+
+  const stepFrame = useCallback((delta: number) => seek(currentTime + delta), [currentTime, seek]);
+  const playPause = useCallback(() => setIsPlaying(v => !v), []);
+  const toggleLoop = useCallback(() => setIsLooping(v => !v), []);
+
+  const addMediaToTimeline = useCallback((asset: MediaAsset) => {
+    const videoClips = clips.filter(c => c.type === 'video');
+    const start = videoClips.length ? Math.max(...videoClips.map(c => c.startTime + c.duration)) : 0;
+    const clip: TimelineClip = {
+      id: `clip-${Date.now()}`,
+      trackId: 'track-video',
+      assetId: asset.id,
+      type: asset.type === 'image' ? 'video' : 'video',
+      name: asset.name,
+      startTime: start,
+      duration: Math.min(asset.duration || 5, 60),
+      trimIn: 0,
+      sourceUrl: asset.type === 'video' ? asset.url : undefined,
+      thumbnail: asset.thumbnail,
+      scale: 100,
+      rotation: 0,
+      posX: 0,
+      posY: 0,
+      flipH: false,
+      flipV: false,
+      cropMode: 'fill',
+      opacity: 100,
+      speed: 1,
+      volume: 100,
+      muted: false,
+      fadeIn: 0,
+      fadeOut: 0,
+      filter: 'none',
+      effect: 'none',
+      effectIntensity: 50,
+      transition: 'none',
+      transitionDuration: 0.5,
+      adjustments: { ...DEFAULT_ADJUSTMENTS }
+    };
+    pushHistory(clips);
+    setClips(prev => [...prev, clip]);
+    setSelectedClipId(clip.id);
+  }, [clips, pushHistory]);
+
+  const addText = useCallback((text?: string, style?: Partial<TimelineClip>) => {
+    const clip: TimelineClip = {
+      id: `text-${Date.now()}`,
+      trackId: 'track-text',
+      type: 'text',
+      name: text || 'Heading Title',
+      text: text || 'Heading Title',
+      startTime: currentTime,
+      duration: 3.5,
+      trimIn: 0,
+      scale: 100,
+      rotation: 0,
+      posX: 0,
+      posY: -25,
+      flipH: false,
+      flipV: false,
+      cropMode: 'fit',
+      opacity: 100,
+      speed: 1,
+      volume: 0,
+      muted: true,
+      fadeIn: 0.2,
+      fadeOut: 0.2,
+      fontFamily: style?.fontFamily || 'Montserrat',
+      fontSize: style?.fontSize || 34,
+      textColor: style?.textColor || '#FFFFFF',
+      isBold: style?.isBold ?? true,
+      isItalic: style?.isItalic ?? false,
+      strokeColor: style?.strokeColor || '#000000',
+      strokeWidth: style?.strokeWidth ?? 3,
+      shadowColor: style?.shadowColor || 'rgba(0,0,0,0.8)',
+      shadowBlur: style?.shadowBlur ?? 8,
+      textAnimation: style?.textAnimation || 'fade',
+      filter: 'none',
+      effect: 'none',
+      effectIntensity: 0,
+      transition: 'none',
+      transitionDuration: 0,
+      adjustments: { ...DEFAULT_ADJUSTMENTS }
+    };
+    pushHistory(clips);
+    setClips(prev => [...prev, clip]);
+    setSelectedClipId(clip.id);
+  }, [clips, currentTime, pushHistory]);
+
+  const addSticker = useCallback((content: string, category: 'emoji' | 'badge' | 'shape') => {
+    const clip: TimelineClip = {
+      id: `sticker-${Date.now()}`,
+      trackId: 'track-stickers',
+      type: 'sticker',
+      name: category === 'badge' ? content : `Sticker ${content}`,
+      stickerContent: content,
+      stickerCategory: category,
+      startTime: currentTime,
+      duration: 3,
+      trimIn: 0,
+      scale: 100,
+      rotation: 0,
+      posX: 0,
+      posY: 0,
+      flipH: false,
+      flipV: false,
+      cropMode: 'fit',
+      opacity: 100,
+      speed: 1,
+      volume: 0,
+      muted: true,
+      fadeIn: 0.2,
+      fadeOut: 0.2,
+      filter: 'none',
+      effect: 'none',
+      effectIntensity: 0,
+      transition: 'none',
+      transitionDuration: 0,
+      adjustments: { ...DEFAULT_ADJUSTMENTS }
+    };
+    pushHistory(clips);
+    setClips(prev => [...prev, clip]);
+    setSelectedClipId(clip.id);
+  }, [clips, currentTime, pushHistory]);
+
+  const addAudio = useCallback((audio: { name: string; url: string; duration: number }) => {
+    const clip: TimelineClip = {
+      id: `audio-${Date.now()}`,
+      trackId: 'track-audio-music',
+      type: 'audio',
+      name: audio.name,
+      startTime: currentTime,
+      duration: audio.duration,
+      trimIn: 0,
+      sourceUrl: audio.url,
+      scale: 100,
+      rotation: 0,
+      posX: 0,
+      posY: 0,
+      flipH: false,
+      flipV: false,
+      cropMode: 'fit',
+      opacity: 100,
+      speed: 1,
+      volume: 85,
+      muted: false,
+      fadeIn: 0.5,
+      fadeOut: 0.5,
+      filter: 'none',
+      effect: 'none',
+      effectIntensity: 0,
+      transition: 'none',
+      transitionDuration: 0,
+      adjustments: { ...DEFAULT_ADJUSTMENTS }
+    };
+    pushHistory(clips);
+    setClips(prev => [...prev, clip]);
+    setSelectedClipId(clip.id);
+  }, [clips, currentTime, pushHistory]);
+
+  const uploadMedia = useCallback((file: File) => {
+    const url = URL.createObjectURL(file);
+    if (file.type.startsWith('video/')) {
+      const v = document.createElement('video');
+      v.preload = 'metadata';
+      v.src = url;
+      v.onloadedmetadata = () => {
+        const asset: MediaAsset = {
+          id: `upload-${Date.now()}`,
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          type: 'video', url, duration: v.duration || 5,
+          thumbnail: url, width: v.videoWidth, height: v.videoHeight
+        };
+        setMediaAssets(prev => [asset, ...prev]);
+        addMediaToTimeline(asset);
+      };
+    } else if (file.type.startsWith('image/')) {
+      const img = new Image();
+      img.onload = () => {
+        const asset: MediaAsset = {
+          id: `upload-${Date.now()}`,
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          type: 'image', url, duration: 5, thumbnail: url, width: img.width, height: img.height
+        };
+        setMediaAssets(prev => [asset, ...prev]);
+        addMediaToTimeline(asset);
+      };
+      img.src = url;
+    } else if (file.type.startsWith('audio/')) {
+      const audio = document.createElement('audio');
+      audio.preload = 'metadata';
+      audio.src = url;
+      audio.onloadedmetadata = () => addAudio({ name: file.name.replace(/\.[^/.]+$/, ''), url, duration: audio.duration || 15 });
+    }
+  }, [addAudio, addMediaToTimeline]);
+
+  const split = useCallback(() => {
+    if (!selectedClip) return;
+    if (currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) return;
+    const offset = currentTime - selectedClip.startTime;
+    const first = { ...selectedClip, duration: offset };
+    const second = { ...selectedClip, id: `${selectedClip.id}-part2-${Date.now()}`, name: `${selectedClip.name} (Part 2)`, startTime: currentTime, duration: selectedClip.duration - offset, trimIn: selectedClip.trimIn + offset * (selectedClip.speed || 1) };
+    pushHistory(clips);
+    setClips(prev => prev.flatMap(c => c.id === selectedClip.id ? [first, second] : [c]));
+    setSelectedClipId(second.id);
+  }, [selectedClip, currentTime, clips, pushHistory]);
+
+  const trimStart = useCallback(() => {
+    if (!selectedClip || currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) return;
+    const delta = currentTime - selectedClip.startTime;
+    pushHistory(clips);
+    setClips(prev => prev.map(c => c.id === selectedClip.id ? { ...c, startTime: currentTime, duration: c.duration - delta, trimIn: c.trimIn + delta * (c.speed || 1) } : c));
+  }, [selectedClip, currentTime, clips, pushHistory]);
+
+  const trimEnd = useCallback(() => {
+    if (!selectedClip || currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) return;
+    pushHistory(clips);
+    setClips(prev => prev.map(c => c.id === selectedClip.id ? { ...c, duration: currentTime - c.startTime } : c));
+  }, [selectedClip, currentTime, clips, pushHistory]);
+
+  const duplicate = useCallback(() => {
+    if (!selectedClip) return;
+    const copy = { ...selectedClip, id: `${selectedClip.id}-copy-${Date.now()}`, name: `${selectedClip.name} (Copy)`, startTime: selectedClip.startTime + selectedClip.duration + 0.1 };
+    pushHistory(clips);
+    setClips(prev => [...prev, copy]);
+    setSelectedClipId(copy.id);
+  }, [selectedClip, clips, pushHistory]);
+
+  const remove = useCallback(() => {
+    if (!selectedClipId) return;
+    pushHistory(clips);
+    setClips(prev => prev.filter(c => c.id !== selectedClipId));
+    setSelectedClipId(null);
+  }, [selectedClipId, clips, pushHistory]);
+
+  const save = useCallback(() => {
+    try { localStorage.setItem('clipforge-project', JSON.stringify({ projectName, aspectRatio, clips })); } catch {}
+  }, [projectName, aspectRatio, clips]);
+
+  return (
+    <div className="h-screen w-screen bg-[#0B0D12] text-white flex flex-col overflow-hidden font-sans">
+      <Header projectName={projectName} onUpdateProjectName={setProjectName} aspectRatio={aspectRatio} onChangeAspectRatio={setAspectRatio} canUndo={historyStack.length > 0} canRedo={redoStack.length > 0} onUndo={undo} onRedo={redo} onSave={save} onOpenExport={() => setIsExportOpen(true)} />
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        <LeftSidebar activeTab={activeTab} onSelectTab={setActiveTab} mediaAssets={mediaAssets} onUploadMedia={uploadMedia} onAddMediaToTimeline={addMediaToTimeline} onAddTextToTimeline={addText} onAddStickerToTimeline={addSticker} onAddAudioToTimeline={addAudio} selectedClip={selectedClip} onUpdateSelectedClip={updateSelectedClip} />
+        <CenterPreview aspectRatio={aspectRatio} currentTime={currentTime} duration={duration} isPlaying={isPlaying} isLooping={isLooping} clips={clips} onPlayPause={playPause} onSeek={seek} onToggleLoop={toggleLoop} onStepFrame={stepFrame} />
+        <RightPanel selectedClip={selectedClip} onUpdateClip={updateSelectedClip} onDuplicateClip={duplicate} onDeleteClip={remove} onSplitClip={split} aspectRatio={aspectRatio} onChangeAspectRatio={setAspectRatio} duration={duration} />
+      </div>
+      <Timeline tracks={tracks} clips={clips} currentTime={currentTime} duration={duration} selectedClipId={selectedClipId} onSelectClip={setSelectedClipId} onSeek={seek} onUpdateClips={updateClips} onSplitClip={split} onTrimClipStart={trimStart} onTrimClipEnd={trimEnd} onDuplicateClip={duplicate} onDeleteClip={remove} />
+      <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} clips={clips} duration={duration} aspectRatio={aspectRatio} projectName={projectName} />
+    </div>
+  );
 }
