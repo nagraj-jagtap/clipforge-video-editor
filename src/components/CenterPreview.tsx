@@ -49,7 +49,7 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
 
   // Active Main Video Clip at currentTime
   const activeVideoClip = clips.find(
-    (c) => c.type === 'video' && currentTime >= c.startTime && currentTime < c.startTime + c.duration
+    (c) => (c.type === 'video' || c.type === 'image') && currentTime >= c.startTime && currentTime < c.startTime + c.duration
   );
 
   // Active Text Clips at currentTime
@@ -64,7 +64,7 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
 
   // Synchronize HTML5 video element with timeline currentTime
   useEffect(() => {
-    if (!videoRef.current || !activeVideoClip) return;
+    if (!videoRef.current || !activeVideoClip || activeVideoClip.type !== 'video') return;
 
     const clipTime = (currentTime - activeVideoClip.startTime) * (activeVideoClip.speed || 1.0) + activeVideoClip.trimIn;
     const video = videoRef.current;
@@ -167,7 +167,7 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
               className="w-full h-full relative overflow-hidden flex items-center justify-center transition-all"
               style={{
                 ...getEffectStyle(activeVideoClip.effect, activeVideoClip.effectIntensity),
-                filter: getCssFilterString(activeVideoClip),
+                filter: [getCssFilterString(activeVideoClip), activeVideoClip.effect === 'rgbSplit' ? 'drop-shadow(3px 0 0 rgba(255,0,80,0.7)) drop-shadow(-3px 0 0 rgba(0,240,255,0.7))' : activeVideoClip.effect === 'blur' ? 'blur(4px)' : ''].filter(Boolean).join(' '),
                 opacity: (activeVideoClip.opacity ?? 100) / 100
               }}
             >
