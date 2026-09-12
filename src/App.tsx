@@ -26,7 +26,7 @@ import { ExportModal } from './components/ExportModal';
 
 export default function App() {
   // Project settings
-  const [projectName, setProjectName] = useState('My Viral Short #1');
+  const [projectName, setProjectName] = useState('Untitled Project');
   const [aspectRatio, setAspectRatio] = useState<AspectRatioType>('9:16');
   const [activeTab, setActiveTab] = useState<SidebarTab>('media');
 
@@ -35,9 +35,8 @@ export default function App() {
 
   // Multi-track state
   const [tracks, setTracks] = useState<TimelineTrack[]>(INITIAL_CREATOR_TRACKS);
-  const [clips, setClips] = useState<TimelineClip[]>(INITIAL_CREATOR_CLIPS);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>('clip-v1');
-
+  const [clips, setClips] = useState<TimelineClip[]>([]);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   // Playback state
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(15.0);
