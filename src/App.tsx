@@ -156,7 +156,24 @@ export default function App() {
         };
         setMediaAssets((prev) => [newAsset, ...prev]);
         handleAddMediaToTimeline(newAsset);
+      };} else if (file.type.startsWith('image')) {
+       const img = new Image();
+    img.onload = () => {
+      const newAsset: MediaAsset = {
+        id: `media-upload-${Date.now()}`,
+        name: file.name.replace(/\.[^/.]+$/, ''),
+        type: 'image',
+        url,
+        duration: 5.0,
+        thumbnail: url,
+        width: img.width,
+        height: img.height
       };
+
+      setMediaAssets((prev) => [newAsset, ...prev]);
+      handleAddMediaToTimeline(newAsset);
+    };
+    img.src = url;
     } else if (isAudio) {
       handleAddAudioToTimeline({
         name: file.name.replace(/\.[^/.]+$/, ''),
@@ -185,7 +202,7 @@ export default function App() {
       startTime: start,
       duration: Math.min(10.0, asset.duration || 5.0),
       trimIn: 0,
-      sourceUrl: asset.url,
+     sourceUrl: asset.type === 'video' ? asset.url : undefined,
       thumbnail: asset.thumbnail,
       speed: 1.0,
       volume: 100,
