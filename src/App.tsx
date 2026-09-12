@@ -108,10 +108,10 @@ export default function App() {
     const videoClips = clips.filter(c => c.type === 'video');
     const start = videoClips.length ? Math.max(...videoClips.map(c => c.startTime + c.duration)) : 0;
     const clip: TimelineClip = {
-      id: `clip-${Date.now()}`,
+      id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       trackId: 'track-video',
       assetId: asset.id,
-      type: asset.type === 'image' ? 'video' : 'video',
+      type: 'video',
       name: asset.name,
       startTime: start,
       duration: Math.min(asset.duration || 5, 60),
@@ -145,7 +145,7 @@ export default function App() {
 
   const addText = useCallback((text?: string, style?: Partial<TimelineClip>) => {
     const clip: TimelineClip = {
-      id: `text-${Date.now()}`,
+      id: `text-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       trackId: 'track-text',
       type: 'text',
       name: text || 'Heading Title',
@@ -190,7 +190,7 @@ export default function App() {
 
   const addSticker = useCallback((content: string, category: 'emoji' | 'badge' | 'shape') => {
     const clip: TimelineClip = {
-      id: `sticker-${Date.now()}`,
+      id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       trackId: 'track-stickers',
       type: 'sticker',
       name: category === 'badge' ? content : `Sticker ${content}`,
@@ -226,7 +226,7 @@ export default function App() {
 
   const addAudio = useCallback((audio: { name: string; url: string; duration: number }) => {
     const clip: TimelineClip = {
-      id: `audio-${Date.now()}`,
+      id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       trackId: 'track-audio-music',
       type: 'audio',
       name: audio.name,
@@ -259,39 +259,97 @@ export default function App() {
     setSelectedClipId(clip.id);
   }, [clips, currentTime, pushHistory]);
 
+  const createVideoThumbnail = (video: HTMLVideoElement): string => {
+    try {
+      const canvas = document.createElement('canvas');
+      const width = video.videoWidth || 640;
+      const height = video.videoHeight || 360;
+      const maxWidth = 640;
+      const scale = Math.min(1, maxWidth / width);
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', 0.82);
+    } catch {
+      return '';
+    }
+  };
+
   const uploadMedia = useCallback((file: File) => {
+    if (!file || file.size === 0) return;
     const url = URL.createObjectURL(file);
+    const name = file.name.replace(/\.[^/.]+$/, '');
+    const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
     if (file.type.startsWith('video/')) {
       const v = document.createElement('video');
       v.preload = 'metadata';
+      v.muted = true;
+      v.playsInline = true;
       v.src = url;
       v.onloadedmetadata = () => {
-        const asset: MediaAsset = {
-          id: `upload-${Date.now()}`,
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          type: 'video', url, duration: v.duration || 5,
-          thumbnail: url, width: v.videoWidth, height: v.videoHeight
+        const finish = () => {
+          const thumbnail = createVideoThumbnail(v) || url;
+          const asset: MediaAsset = {
+            id,
+            name,
+            type: 'video',
+            url,
+            duration: Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 5,
+            thumbnail,
+            width: v.videoWidth,
+            height: v.videoHeight
+          };
+          setMediaAssets(prev => [asset, ...prev]);
+          addMediaToTimeline(asset);
+          v.remove();
         };
-        setMediaAssets(prev => [asset, ...prev]);
-        addMediaToTimeline(asset);
+        if (v.readyState >= 2) {
+          if (v.duration > 0.15) {
+            try { v.currentTime = Math.min(0.15, v.duration / 2); } catch { finish(); return; }
+            v.onseeked = finish;
+          } else {
+            finish();
+          }
+        } else {
+          v.onloadeddata = finish;
+        }
       };
-    } else if (file.type.startsWith('image/')) {
+      v.onerror = () => URL.revokeObjectURL(url);
+      return;
+    }
+
+    if (file.type.startsWith('image/')) {
       const img = new Image();
       img.onload = () => {
         const asset: MediaAsset = {
-          id: `upload-${Date.now()}`,
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          type: 'image', url, duration: 5, thumbnail: url, width: img.width, height: img.height
+          id,
+          name,
+          type: 'image',
+          url,
+          duration: 5,
+          thumbnail: url,
+          width: img.width,
+          height: img.height
         };
         setMediaAssets(prev => [asset, ...prev]);
         addMediaToTimeline(asset);
       };
+      img.onerror = () => URL.revokeObjectURL(url);
       img.src = url;
-    } else if (file.type.startsWith('audio/')) {
+      return;
+    }
+
+    if (file.type.startsWith('audio/')) {
       const audio = document.createElement('audio');
       audio.preload = 'metadata';
       audio.src = url;
-      audio.onloadedmetadata = () => addAudio({ name: file.name.replace(/\.[^/.]+$/, ''), url, duration: audio.duration || 15 });
+      audio.onloadedmetadata = () => {
+        addAudio({ name, url, duration: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 15 });
+      };
+      audio.onerror = () => URL.revokeObjectURL(url);
     }
   }, [addAudio, addMediaToTimeline]);
 
