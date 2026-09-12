@@ -14,92 +14,63 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Patch effects panel and body effects
+      - name: Patch effects behavior
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          timeline = Path('src/components/Timeline.tsx')
-          s = timeline.read_text()
+          p = Path('src/components/Timeline.tsx')
+          s = p.read_text()
 
-          old = "const [trim, setTrim] = useState<{ id: string; side: 'start' | 'end' } | null>(null); const [toolTab, setToolTab] = useState<ToolTab>('filters'); const [category, setCategory] = useState('All'); const [editingTextId, setEditingTextId] = useState<string | null>(null);"
-          new = "const [trim, setTrim] = useState<{ id: string; side: 'start' | 'end' } | null>(null); const [toolTab, setToolTab] = useState<ToolTab>('filters'); const [category, setCategory] = useState('All'); const [editingTextId, setEditingTextId] = useState<string | null>(null); const [effectsOpenId, setEffectsOpenId] = useState<string | null>(null);"
-          if old in s and 'effectsOpenId' not in s:
-              s = s.replace(old, new, 1)
+          if 'effectsOpenId' not in s:
+              s = s.replace(
+                  "const [editingTextId,setEditingTextId]=useState<string|null>(null);",
+                  "const [editingTextId,setEditingTextId]=useState<string|null>(null); const [effectsOpenId,setEffectsOpenId]=useState<string|null>(null);"
+              )
+              s = s.replace(
+                  "const [editingTextId, setEditingTextId] = useState<string | null>(null);",
+                  "const [editingTextId, setEditingTextId] = useState<string | null>(null); const [effectsOpenId, setEffectsOpenId] = useState<string | null>(null);"
+              )
 
-          old = "const bodyRef = useRef<HTMLDivElement>(null); const timelineWidth = Math.max(900, duration * zoom + 220); const selectedClip = clips.find(c => c.id === selectedClipId) || null; const showEffects = !!selectedClip && (selectedClip.type === 'video' || selectedClip.type === 'image');"
-          new = "const bodyRef = useRef<HTMLDivElement>(null); const timelineWidth = Math.max(900, duration * zoom + 220); const selectedClip = clips.find(c => c.id === selectedClipId) || null; const showEffects = !!selectedClip && effectsOpenId === selectedClip.id && (selectedClip.type === 'video' || selectedClip.type === 'image');"
-          if old in s:
-              s = s.replace(old, new, 1)
+          s = s.replace(
+              "const showEffects = !!selectedClip && (selectedClip.type === 'video' || selectedClip.type === 'image');",
+              "const showEffects = !!selectedClip && effectsOpenId === selectedClip.id && (selectedClip.type === 'video' || selectedClip.type === 'image');"
+          )
 
-          old = "onMouseDown={e=>{e.stopPropagation();onSelectClip(c.id);}}"
-          new = "onMouseDown={e=>{e.stopPropagation();onSelectClip(c.id);setEffectsOpenId(v=>v===c.id?null:c.id);}}"
-          if old in s:
-              s = s.replace(old, new, 1)
+          # Only the dedicated + button toggles the effects tray.
+          s = s.replace(
+              "onMouseDown={e=>{e.stopPropagation();onSelectClip(c.id);}} className=\"absolute z-20 flex items-center justify-center w-5 h-5",
+              "onMouseDown={e=>{e.stopPropagation();onSelectClip(c.id);setEffectsOpenId(v=>v===c.id?null:c.id);}} className=\"absolute z-20 flex items-center justify-center w-5 h-5"
+          )
 
-          body_ids = {
-            'Electric Rays':'electricRays', 'Neon Glow Outline':'neonGlowOutline', 'Lightning Strokes':'lightningStrokes', 'Laser Aura':'laserAura',
-            'Glowing Eyes':'glowingEyes', 'Halo Ring':'haloRing', 'Angel Wings':'angelWings', 'Demon Horns':'demonHorns', 'Floating Crown':'floatingCrown',
-            'Disappearing Clone':'disappearingClone', 'Shadow Trail':'shadowTrail', 'RGB Echo':'rgbEcho', 'Speed Phantom':'speedPhantom',
-            'Super Saiyan Flame':'superSaiyanFlame', 'Particle Burst':'particleBurst', 'Galaxy Sparkles':'galaxySparkles', 'Cosmic Pulse':'cosmicPulse',
-            'Background Matrix':'backgroundMatrix', 'Fire Ring Behind':'fireRingBehind', 'Grid Aura':'gridAura'
+          # Body-effect cards must have real ids so clicking them updates the clip.
+          body = {
+            'Electric Rays':'electricRays','Neon Glow Outline':'neonGlowOutline','Lightning Strokes':'lightningStrokes','Laser Aura':'laserAura',
+            'Glowing Eyes':'glowingEyes','Halo Ring':'haloRing','Angel Wings':'angelWings','Demon Horns':'demonHorns','Floating Crown':'floatingCrown',
+            'Disappearing Clone':'disappearingClone','Shadow Trail':'shadowTrail','RGB Echo':'rgbEcho','Speed Phantom':'speedPhantom',
+            'Super Saiyan Flame':'superSaiyanFlame','Particle Burst':'particleBurst','Galaxy Sparkles':'galaxySparkles','Cosmic Pulse':'cosmicPulse',
+            'Background Matrix':'backgroundMatrix','Fire Ring Behind':'fireRingBehind','Grid Aura':'gridAura'
           }
-          for name, ident in body_ids.items():
-              needle = "{ name: '%s', desc:" % name
-              repl = "{ name: '%s', id: '%s', desc:" % (name, ident)
-              s = s.replace(needle, repl)
+          for name, ident in body.items():
+              s = s.replace("{ name: '%s', desc:" % name, "{ name: '%s', id: '%s', desc:" % (name, ident))
 
-          timeline.write_text(s)
-
-          preview = Path('src/components/CenterPreview.tsx')
-          p = preview.read_text()
-          marker = "          {/* Active Stickers Layer */}"
-          if marker in p and 'bodyEffect ===' not in p:
-              overlay = r'''          {/* Body Effects: visible browser-native approximations tied to the selected clip */}
-          {activeVideoClip?.bodyEffect && (
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
-              {['electricRays','neonGlowOutline','lightningStrokes','laserAura'].includes(activeVideoClip.bodyEffect) && (
-                <div className="absolute inset-[5%] rounded-[18%] border-2 border-fuchsia-400/70 shadow-[0_0_18px_rgba(217,70,239,0.8)] animate-pulse" />
-              )}
-              {['glowingEyes','demonHorns','floatingCrown','haloRing'].includes(activeVideoClip.bodyEffect) && (
-                <div className="absolute left-1/2 top-[24%] -translate-x-1/2 w-24 h-24 rounded-full border-2 border-cyan-300/80 shadow-[0_0_24px_rgba(34,211,238,0.8)] animate-pulse" />
-              )}
-              {['disappearingClone','shadowTrail','rgbEcho','speedPhantom'].includes(activeVideoClip.bodyEffect) && (
-                <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-500/15 via-transparent to-cyan-400/15 mix-blend-screen animate-pulse" />
-              )}
-              {['superSaiyanFlame','particleBurst','galaxySparkles','cosmicPulse'].includes(activeVideoClip.bodyEffect) && (
-                <div className="absolute inset-[8%] rounded-full bg-[radial-gradient(circle,rgba(251,191,36,0.22),rgba(168,85,247,0.12),transparent_65%)] animate-pulse" />
-              )}
-              {['backgroundMatrix','fireRingBehind','gridAura'].includes(activeVideoClip.bodyEffect) && (
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_20%,rgba(0,240,255,0.12)_55%,transparent_75%)] mix-blend-screen" />
-              )}
-            </div>
-          )}
-
-'''
-              p = p.replace(marker, overlay + marker, 1)
-              preview.write_text(p)
+          p.write_text(s)
           PY
-
       - name: Build
         run: |
           npm install
           npm run build
-
       - name: Commit source fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/Timeline.tsx src/components/CenterPreview.tsx
-          if git diff --cached --quiet; then
-            echo "No source changes needed"
-            exit 0
-          fi
-          git commit -m "Fix effects panel toggle and body effect application"
+          git add src/components/Timeline.tsx
+          if git diff --cached --quiet; then echo "No source changes"; exit 0; fi
+          git commit -m "Fix effects panel toggle and body effect IDs"
           git push
