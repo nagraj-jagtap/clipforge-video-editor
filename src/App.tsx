@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { SidebarTab, AspectRatioType, MediaAsset, TimelineTrack, TimelineClip } from './types';
-import { INITIAL_MEDIA_ASSETS, INITIAL_CREATOR_TRACKS, INITIAL_CREATOR_CLIPS, DEFAULT_ADJUSTMENTS } from './data/creatorAssets';
+import { INITIAL_CREATOR_TRACKS, DEFAULT_ADJUSTMENTS } from './data/creatorAssets';
 import { Header } from './components/Header';
 import { LeftSidebar } from './components/LeftSidebar';
 import { CenterPreview } from './components/CenterPreview';
@@ -12,10 +12,10 @@ export default function App() {
   const [projectName, setProjectName] = useState('Untitled Project');
   const [aspectRatio, setAspectRatio] = useState<AspectRatioType>('9:16');
   const [activeTab, setActiveTab] = useState<SidebarTab>('media');
-  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(INITIAL_MEDIA_ASSETS.filter(a => a.type !== 'audio'));
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [tracks] = useState<TimelineTrack[]>(INITIAL_CREATOR_TRACKS);
-  const [clips, setClips] = useState<TimelineClip[]>(INITIAL_CREATOR_CLIPS);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(INITIAL_CREATOR_CLIPS[0]?.id ?? null);
+  const [clips, setClips] = useState<TimelineClip[]>([]);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLooping, setIsLooping] = useState(true);
