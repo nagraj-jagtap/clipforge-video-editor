@@ -1,0 +1,6 @@
+{
+  "name": "ClipForge",
+  "description": "Free, simple creator video editor for TikTok, YouTube Shorts, and Instagram Reels with multitrack timeline, effects, text animations, filters, and real browser video export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
