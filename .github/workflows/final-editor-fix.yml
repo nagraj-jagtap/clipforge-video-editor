@@ -1,0 +1,56 @@
+name: Final Editor Fix
+on:
+  push:
+    paths:
+      - '.github/workflows/final-editor-fix.yml'
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Patch timeline editor
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/Timeline.tsx')
+          s=p.read_text()
+          s=s.replace("type ToolTab = 'transitions' | 'video' | 'body';", "type ToolTab = 'filters' | 'transitions' | 'video' | 'body';")
+          marker="const videoCategories: Category[] = ["
+          filters="""const filterCategories: Category[] = [\n  { name: 'Quick Filters', items: [\n    { name: 'Original', id: 'none', desc: 'No filter' }, { name: 'Vivid', id: 'flash', desc: 'Stronger color' }, { name: 'Bright', id: 'flash', desc: 'Lift exposure' }, { name: 'Cool', id: 'rgbSplit', desc: 'Cool tone' }, { name: 'Warm', id: 'vintage', desc: 'Warm tone' }\n  ]},\n  { name: 'Creator Looks', items: [\n    { name: 'Cinematic', id: 'filmGrain', desc: 'Film contrast' }, { name: 'Retro', id: 'vintage', desc: 'Vintage look' }, { name: 'VHS', id: 'vhs', desc: 'Tape look' }, { name: 'Dreamy', id: 'blur', desc: 'Soft look' }, { name: 'Mono', id: 'noise', desc: 'Monochrome style' }\n  ]}\n];\n\n"""
+          if 'const filterCategories' not in s:
+              s=s.replace(marker, filters+marker)
+          state="const [trim, setTrim] = useState<{ id: string; side: 'start' | 'end' } | null>(null); const [toolTab, setToolTab] = useState<ToolTab>('transitions'); const [category, setCategory] = useState('All');"
+          newstate="const [trim, setTrim] = useState<{ id: string; side: 'start' | 'end' } | null>(null); const [toolTab, setToolTab] = useState<ToolTab>('filters'); const [category, setCategory] = useState('All'); const [editingTextId, setEditingTextId] = useState<string | null>(null);"
+          s=s.replace(state,newstate)
+          old="""if (toolTab === 'body') onUpdateClips(clips.map(c => c.id === selectedClip.id ? { ...c, bodyEffect: id } : c));\n    else if (toolTab === 'transitions')"""
+          new="""if (toolTab === 'body') onUpdateClips(clips.map(c => c.id === selectedClip.id ? { ...c, bodyEffect: id } : c));\n    else if (toolTab === 'transitions')"""
+          # filters use the same effect channel as video effects
+          s=s.replace(old,new)
+          s=s.replace("const categories = toolTab === 'transitions' ? transitionCategories : toolTab === 'video' ? videoCategories : bodyCategories;", "const categories = toolTab === 'filters' ? filterCategories : toolTab === 'transitions' ? transitionCategories : toolTab === 'video' ? videoCategories : bodyCategories;")
+          tabs="""<div className=\"h-9 flex items-center gap-1 px-2 border-b border-[#222733]\">"""
+          filterbtn="""<button onClick={()=>{setToolTab('filters');setCategory('All')}} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold ${toolTab==='filters'?'bg-[#00F0FF]/15 text-[#00F0FF]':'text-[#94A3B8]'}`}><Sparkles className=\"w-3.5 h-3.5\"/>Filters</button>"""
+          if "setToolTab('filters')" not in s:
+              s=s.replace(tabs,tabs+filterbtn)
+          # Make text clips directly editable on double click while preserving normal drag/select behavior.
+          oldlabel="<span className=\"text-[10px] text-white font-semibold truncate\">{c.type==='text'?c.text||c.name:c.name}</span>"
+          newlabel="""{c.type==='text' && editingTextId===c.id ? <input autoFocus value={c.text || ''} onChange={e=>onUpdateClips(clips.map(x=>x.id===c.id?{...x,text:e.target.value,name:e.target.value||'Text'}:x))} onBlur={()=>setEditingTextId(null)} onKeyDown={e=>{if(e.key==='Enter'||e.key==='Escape')setEditingTextId(null)}} onMouseDown={e=>e.stopPropagation()} className=\"min-w-0 flex-1 bg-[#0B0D12] border border-[#00F0FF] rounded px-1 text-[10px] text-white outline-none\" /> : <span onDoubleClick={e=>{e.stopPropagation();onSelectClip(c.id);setEditingTextId(c.id)}} className=\"text-[10px] text-white font-semibold truncate cursor-text\">{c.type==='text'?c.text||c.name:c.name}</span>}"""
+          if oldlabel in s:
+              s=s.replace(oldlabel,newlabel)
+          p.write_text(s)
+          PY
+      - name: Build
+        run: npm install && npm run build
+      - name: Commit source fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Timeline.tsx
+          git diff --cached --quiet || git commit -m "Fix timeline text editing and add filters to effects browser"
+          git push
