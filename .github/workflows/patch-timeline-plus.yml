@@ -1,0 +1,39 @@
+name: Patch timeline plus button
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Add timeline plus button before media clips'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Timeline
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/Timeline.tsx')
+          s = p.read_text()
+          old = "clips.filter(c=>c.trackId===t.id).sort((a,b)=>a.startTime-b.startTime).map(c=> <div key={c.id}"
+          if old not in s:
+              old = "clips.filter(c=>c.trackId===t.id).sort((a,b)=>a.startTime-b.startTime).map(c => <div key={c.id}"
+          if old not in s:
+              raise SystemExit('timeline clip map pattern not found')
+          new = "clips.filter(c=>c.trackId===t.id).sort((a,b)=>a.startTime-b.startTime).map(c=> <React.Fragment key={c.id}><button type=\"button\" aria-label=\"Open effects\" title=\"Effects\" onMouseDown={e=>{e.stopPropagation();onSelectClip(c.id);}} className=\"absolute z-20 flex items-center justify-center w-5 h-5 rounded-full border border-[#00F0FF]/70 bg-[#111827] text-[#00F0FF] hover:bg-[#00F0FF] hover:text-[#0B0D12] shadow-lg\" style={{left:Math.max(2,c.startTime*zoom-24),top:9}} hidden={c.type!=='video'&&c.type!=='image'}>+</button><div key={c.id}"
+          s = s.replace(old, new, 1)
+          needle = "</div>)}</div>)}</div><div className=\"absolute top-0 bottom-0 w-px bg-[#EF4444] z-30 pointer-events-none\""
+          repl = "</div></React.Fragment>)}</div>)}</div><div className=\"absolute top-0 bottom-0 w-px bg-[#EF4444] z-30 pointer-events-none\""
+          if needle not in s:
+              raise SystemExit('timeline clip map closing pattern not found')
+          s = s.replace(needle, repl, 1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Timeline.tsx
+          git diff --cached --quiet || git commit -m "Add effects plus button before media clips"
+          git push
