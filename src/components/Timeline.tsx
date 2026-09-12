@@ -4,28 +4,26 @@
  */
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { 
-  Scissors, 
-  Trash2, 
-  Copy, 
-  ZoomIn, 
-  ZoomOut, 
-  Magnet, 
-  Video, 
-  Music, 
-  Type, 
-  Smile, 
-  Volume2, 
-  VolumeX, 
-  Eye, 
-  EyeOff, 
-  Lock, 
-  Unlock,
+import {
+  Scissors,
+  Trash2,
+  Copy,
+  ZoomIn,
+  ZoomOut,
+  Magnet,
+  Video,
+  Music,
+  Type,
+  Smile,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Plus,
+  X,
+  Sparkles
 } from 'lucide-react';
 import { TimelineClip, TimelineTrack } from '../types';
 import { formatTimecode } from '../utils/videoExporter';
+import { CREATOR_TRANSITIONS } from '../data/creatorAssets';
 
 interface TimelineProps {
   tracks: TimelineTrack[];
@@ -58,29 +56,23 @@ export const Timeline: React.FC<TimelineProps> = ({
   onDuplicateClip,
   onDeleteClip
 }) => {
-  const [zoom, setZoom] = useState(60); // pixels per second
+  const [zoom, setZoom] = useState(60);
   const [isSnapEnabled, setIsSnapEnabled] = useState(true);
-  const timelineBodyRef = useRef<HTMLDivElement>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
-
-  // Dragging clip state
   const [draggingClipId, setDraggingClipId] = useState<string | null>(null);
   const [dragStartX, setDragStartX] = useState(0);
   const [dragInitialTime, setDragInitialTime] = useState(0);
-
-  // Trimming handle state: 'start' | 'end' | null
   const [trimmingHandle, setTrimmingHandle] = useState<{ clipId: string; type: 'start' | 'end' } | null>(null);
+  const [transitionTargetId, setTransitionTargetId] = useState<string | null>(null);
+  const timelineBodyRef = useRef<HTMLDivElement>(null);
 
-  // Calculate timeline width
-  const timelineWidth = Math.max(800, duration * zoom + 200);
+  const timelineWidth = Math.max(800, duration * zoom + 240);
 
-  // Scrub playhead handler
   const handleTimelineMouseDown = (e: React.MouseEvent) => {
     if (!timelineBodyRef.current) return;
     const rect = timelineBodyRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left + timelineBodyRef.current.scrollLeft;
-    const newTime = Math.max(0, Math.min(duration, clickX / zoom));
-    onSeek(newTime);
+    onSeek(Math.max(0, Math.min(duration, clickX / zoom)));
     setIsScrubbing(true);
   };
 
@@ -89,56 +81,41 @@ export const Timeline: React.FC<TimelineProps> = ({
       if (isScrubbing && timelineBodyRef.current) {
         const rect = timelineBodyRef.current.getBoundingClientRect();
         const clickX = e.clientX - rect.left + timelineBodyRef.current.scrollLeft;
-        const newTime = Math.max(0, Math.min(duration, clickX / zoom));
-        onSeek(newTime);
-      } else if (draggingClipId) {
-        // Drag moving clip horizontally
-        const deltaX = e.clientX - dragStartX;
-        const deltaTime = deltaX / zoom;
-        let newStartTime = Math.max(0, dragInitialTime + deltaTime);
+        onSeek(Math.max(0, Math.min(duration, clickX / zoom)));
+        return;
+      }
 
+      if (draggingClipId) {
+        const deltaTime = (e.clientX - dragStartX) / zoom;
+        let newStartTime = Math.max(0, dragInitialTime + deltaTime);
         if (isSnapEnabled) {
-          // Snap to 0 or playhead
           if (Math.abs(newStartTime - currentTime) < 0.2) newStartTime = currentTime;
           if (Math.abs(newStartTime) < 0.2) newStartTime = 0;
         }
+        onUpdateClips(clips.map((c) => c.id === draggingClipId ? { ...c, startTime: newStartTime } : c));
+        return;
+      }
 
-        onUpdateClips(
-          clips.map((c) => (c.id === draggingClipId ? { ...c, startTime: newStartTime } : c))
-        );
-      } else if (trimmingHandle) {
-        // Trimming clip length
-        const targetClip = clips.find((c) => c.id === trimmingHandle.clipId);
-        if (targetClip && timelineBodyRef.current) {
-          const rect = timelineBodyRef.current.getBoundingClientRect();
-          const pointerX = e.clientX - rect.left + timelineBodyRef.current.scrollLeft;
-          const pointerTime = Math.max(0, pointerX / zoom);
+      if (trimmingHandle && timelineBodyRef.current) {
+        const target = clips.find((c) => c.id === trimmingHandle.clipId);
+        if (!target) return;
+        const rect = timelineBodyRef.current.getBoundingClientRect();
+        const pointerTime = Math.max(0, (e.clientX - rect.left + timelineBodyRef.current.scrollLeft) / zoom);
 
-          if (trimmingHandle.type === 'start') {
-            const originalEndTime = targetClip.startTime + targetClip.duration;
-            const newStartTime = Math.min(originalEndTime - 0.2, Math.max(0, pointerTime));
-            const newDuration = originalEndTime - newStartTime;
-            const trimDelta = newStartTime - targetClip.startTime;
-
-            onUpdateClips(
-              clips.map((c) =>
-                c.id === trimmingHandle.clipId
-                  ? {
-                      ...c,
-                      startTime: newStartTime,
-                      duration: newDuration,
-                      trimIn: Math.max(0, c.trimIn + trimDelta)
-                    }
-                  : c
-              )
-            );
-          } else {
-            // Trim end
-            const newDuration = Math.max(0.2, pointerTime - targetClip.startTime);
-            onUpdateClips(
-              clips.map((c) => (c.id === trimmingHandle.clipId ? { ...c, duration: newDuration } : c))
-            );
-          }
+        if (trimmingHandle.type === 'start') {
+          const end = target.startTime + target.duration;
+          const newStart = Math.min(end - 0.2, pointerTime);
+          onUpdateClips(clips.map((c) => c.id === target.id ? {
+            ...c,
+            startTime: newStart,
+            duration: end - newStart,
+            trimIn: Math.max(0, c.trimIn + newStart - c.startTime)
+          } : c));
+        } else {
+          onUpdateClips(clips.map((c) => c.id === target.id ? {
+            ...c,
+            duration: Math.max(0.2, pointerTime - c.startTime)
+          } : c));
         }
       }
     };
@@ -153,238 +130,152 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     }
-
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isScrubbing, draggingClipId, trimmingHandle, dragStartX, dragInitialTime, zoom, duration, clips, currentTime, isSnapEnabled, onSeek, onUpdateClips]);
 
+  const applyTransition = (clipId: string, transition: TimelineClip['transition']) => {
+    onUpdateClips(clips.map((c) => c.id === clipId ? {
+      ...c,
+      transition,
+      transitionDuration: transition === 'none' ? 0 : Math.min(0.8, Math.max(0.2, c.transitionDuration || 0.5))
+    } : c));
+    onSelectClip(clipId);
+    setTransitionTargetId(null);
+  };
+
   return (
-    <div className="h-64 bg-[#12141A] border-t border-[#222733] flex flex-col shrink-0 select-none overflow-hidden z-20">
-      {/* Timeline Quick Action Toolbar */}
-      <div className="h-9 bg-[#171B24] border-b border-[#222733] px-3 flex items-center justify-between shrink-0">
-        {/* Left: Edit Action Buttons */}
-        <div className="flex items-center space-x-1.5">
-          {/* Split (Razor) */}
-          <button
-            onClick={onSplitClip}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-[#1F2430] hover:bg-[#00F0FF] hover:text-[#0B0D12] text-xs font-semibold text-white transition-colors"
-            title="Split selected clip at playhead (S)"
-          >
-            <Scissors className="w-3.5 h-3.5" />
-            <span>Split</span>
-          </button>
-
-          {/* Trim Left */}
-          <button
-            onClick={onTrimClipStart}
-            className="flex items-center space-x-1 px-2 py-1 rounded bg-[#1F2430] hover:bg-[#2A3142] text-xs font-medium text-[#CBD5E1] transition-colors"
-            title="Trim clip start to playhead"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            <span>Trim Start</span>
-          </button>
-
-          {/* Trim Right */}
-          <button
-            onClick={onTrimClipEnd}
-            className="flex items-center space-x-1 px-2 py-1 rounded bg-[#1F2430] hover:bg-[#2A3142] text-xs font-medium text-[#CBD5E1] transition-colors"
-            title="Trim clip end to playhead"
-          >
-            <span>Trim End</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-
-          <div className="h-4 w-[1px] bg-[#262C3A] mx-1"></div>
-
-          {/* Duplicate */}
-          <button
-            onClick={onDuplicateClip}
-            className="p-1.5 rounded bg-[#1F2430] hover:bg-[#2A3142] text-[#CBD5E1] hover:text-white transition-colors"
-            title="Duplicate selected clip (Ctrl+D)"
-          >
-            <Copy className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Delete */}
-          <button
-            onClick={onDeleteClip}
-            className="p-1.5 rounded bg-[#1F2430] hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
-            title="Delete selected clip (Delete / Backspace)"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+    <div className="h-64 bg-[#12141A] border-t border-[#222733] flex flex-col shrink-0 select-none overflow-hidden z-20 relative">
+      {/* CapCut-style transition picker */}
+      {transitionTargetId && (
+        <div className="absolute top-10 right-3 z-50 w-[310px] max-h-[205px] overflow-y-auto rounded-xl border border-[#334155] bg-[#11151D] shadow-2xl shadow-black/60 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-xs font-bold text-white">Transitions</p>
+              <p className="text-[9px] text-[#64748B]">Choose the transition for this clip cut</p>
+            </div>
+            <button onClick={() => setTransitionTargetId(null)} className="p-1 rounded hover:bg-[#222733] text-[#94A3B8] hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {CREATOR_TRANSITIONS.map((trans) => {
+              const target = clips.find((c) => c.id === transitionTargetId);
+              const active = target?.transition === trans.id;
+              return (
+                <button
+                  key={trans.id}
+                  onClick={() => applyTransition(transitionTargetId, trans.id)}
+                  className={`p-2 rounded-lg border text-left flex items-center gap-2 transition-all ${active ? 'bg-[#00F0FF]/15 border-[#00F0FF] text-[#00F0FF]' : 'bg-[#171B24] border-[#262C3A] text-white hover:border-[#00F0FF]/60'}`}
+                >
+                  <span className="text-sm">{trans.icon}</span>
+                  <span className="text-[10px] font-semibold truncate">{trans.name}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
+      )}
 
-        {/* Right: Magnet & Timeline Zoom Controls */}
-        <div className="flex items-center space-x-3">
-          {/* Snap toggle */}
-          <button
-            onClick={() => setIsSnapEnabled(!isSnapEnabled)}
-            className={`p-1.5 rounded transition-colors ${
-              isSnapEnabled ? 'bg-[#00F0FF]/15 text-[#00F0FF]' : 'text-[#64748B] hover:text-white'
-            }`}
-            title="Toggle Magnet / Snapping"
-          >
-            <Magnet className="w-3.5 h-3.5" />
+      {/* Timeline toolbar */}
+      <div className="h-9 bg-[#171B24] border-b border-[#222733] px-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center space-x-1.5">
+          <button onClick={onSplitClip} className="flex items-center space-x-1 px-2.5 py-1 rounded bg-[#1F2430] hover:bg-[#00F0FF] hover:text-[#0B0D12] text-xs font-semibold text-white transition-colors" title="Split selected clip at playhead (S)">
+            <Scissors className="w-3.5 h-3.5" /><span>Split</span>
           </button>
-
-          {/* Zoom Slider */}
+          <button onClick={onTrimClipStart} className="flex items-center space-x-1 px-2 py-1 rounded bg-[#1F2430] hover:bg-[#2A3142] text-xs font-medium text-[#CBD5E1]">
+            <ChevronLeft className="w-3.5 h-3.5" /><span>Trim Start</span>
+          </button>
+          <button onClick={onTrimClipEnd} className="flex items-center space-x-1 px-2 py-1 rounded bg-[#1F2430] hover:bg-[#2A3142] text-xs font-medium text-[#CBD5E1]">
+            <span>Trim End</span><ChevronRight className="w-3.5 h-3.5" />
+          </button>
+          <div className="h-4 w-px bg-[#262C3A] mx-1" />
+          <button onClick={onDuplicateClip} className="p-1.5 rounded bg-[#1F2430] hover:bg-[#2A3142] text-[#CBD5E1]" title="Duplicate selected clip (Ctrl+D)"><Copy className="w-3.5 h-3.5" /></button>
+          <button onClick={onDeleteClip} className="p-1.5 rounded bg-[#1F2430] hover:bg-red-500/20 text-red-400" title="Delete selected clip"><Trash2 className="w-3.5 h-3.5" /></button>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button onClick={() => setIsSnapEnabled(!isSnapEnabled)} className={`p-1.5 rounded ${isSnapEnabled ? 'bg-[#00F0FF]/15 text-[#00F0FF]' : 'text-[#64748B]'}`} title="Toggle snapping"><Magnet className="w-3.5 h-3.5" /></button>
           <div className="flex items-center space-x-1.5">
-            <ZoomOut 
-              className="w-3.5 h-3.5 text-[#94A3B8] cursor-pointer hover:text-white" 
-              onClick={() => setZoom(Math.max(25, zoom - 15))}
-            />
-            <input
-              type="range"
-              min={25}
-              max={150}
-              value={zoom}
-              onChange={(e) => setZoom(parseInt(e.target.value))}
-              className="w-20 accent-[#00F0FF] h-1.5 bg-[#262C3A] rounded cursor-pointer"
-            />
-            <ZoomIn 
-              className="w-3.5 h-3.5 text-[#94A3B8] cursor-pointer hover:text-white" 
-              onClick={() => setZoom(Math.min(150, zoom + 15))}
-            />
+            <ZoomOut className="w-3.5 h-3.5 text-[#94A3B8] cursor-pointer" onClick={() => setZoom(Math.max(25, zoom - 15))} />
+            <input type="range" min={25} max={150} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-20 accent-[#00F0FF] h-1.5 bg-[#262C3A] rounded cursor-pointer" />
+            <ZoomIn className="w-3.5 h-3.5 text-[#94A3B8] cursor-pointer" onClick={() => setZoom(Math.min(150, zoom + 15))} />
           </div>
         </div>
       </div>
 
-      {/* Main Multitrack Workspace */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Track Headers Column */}
-        <div className="w-36 bg-[#171B24] border-r border-[#222733] flex flex-col shrink-0 select-none z-10">
-          {/* Ruler Header Space */}
-          <div className="h-6 border-b border-[#222733] px-2 flex items-center text-[10px] font-mono text-[#94A3B8] uppercase">
-            Tracks
-          </div>
-
-          {/* Track Labels */}
+        {/* Track names */}
+        <div className="w-36 bg-[#171B24] border-r border-[#222733] flex flex-col shrink-0 z-10">
+          <div className="h-6 border-b border-[#222733] px-2 flex items-center text-[10px] font-mono text-[#94A3B8] uppercase">Tracks</div>
           <div className="flex-1 overflow-y-hidden divide-y divide-[#222733]">
             {tracks.map((track) => (
-              <div
-                key={track.id}
-                className="h-10 px-2 flex items-center justify-between text-xs text-[#CBD5E1]"
-              >
-                <div className="flex items-center space-x-1.5 truncate">
-                  {track.type === 'video' && <Video className="w-3 h-3 text-[#38BDF8]" />}
-                  {track.type === 'text' && <Type className="w-3 h-3 text-[#FACC15]" />}
-                  {track.type === 'sticker' && <Smile className="w-3 h-3 text-[#EC4899]" />}
-                  {track.type === 'audio' && <Music className="w-3 h-3 text-[#34D399]" />}
-                  <span className="truncate text-[11px] font-medium">{track.name}</span>
-                </div>
+              <div key={track.id} className="h-10 px-2 flex items-center text-xs text-[#CBD5E1]">
+                {track.type === 'video' && <Video className="w-3 h-3 text-[#38BDF8] mr-1.5" />}
+                {track.type === 'text' && <Type className="w-3 h-3 text-[#FACC15] mr-1.5" />}
+                {track.type === 'sticker' && <Smile className="w-3 h-3 text-[#EC4899] mr-1.5" />}
+                {track.type === 'audio' && <Music className="w-3 h-3 text-[#34D399] mr-1.5" />}
+                <span className="truncate text-[11px] font-medium">{track.name}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Scrollable Tracks & Timeline Body */}
-        <div
-          ref={timelineBodyRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden relative bg-[#0E1015]"
-          onMouseDown={handleTimelineMouseDown}
-        >
+        {/* Timeline body */}
+        <div ref={timelineBodyRef} className="flex-1 overflow-x-auto overflow-y-hidden relative bg-[#0E1015]" onMouseDown={handleTimelineMouseDown}>
           <div style={{ width: `${timelineWidth}px` }} className="h-full relative flex flex-col">
-            {/* Time Ruler */}
             <div className="h-6 bg-[#151821] border-b border-[#222733] relative shrink-0">
               {Array.from({ length: Math.ceil(duration) + 1 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="absolute top-0 bottom-0 border-l border-[#262C3A] text-[9px] font-mono text-[#64748B] pl-1 pt-0.5 pointer-events-none"
-                  style={{ left: `${i * zoom}px` }}
-                >
-                  {formatTimecode(i)}
-                </div>
+                <div key={i} className="absolute top-0 bottom-0 border-l border-[#262C3A] text-[9px] font-mono text-[#64748B] pl-1 pt-0.5 pointer-events-none" style={{ left: `${i * zoom}px` }}>{formatTimecode(i)}</div>
               ))}
             </div>
 
-            {/* Tracks Body */}
             <div className="flex-1 divide-y divide-[#1F2430]/70 relative">
               {tracks.map((track) => {
-                const trackClips = clips.filter((c) => c.trackId === track.id);
-
+                const trackClips = clips.filter((c) => c.trackId === track.id).sort((a, b) => a.startTime - b.startTime);
                 return (
                   <div key={track.id} className="h-10 relative bg-[#0E1015]/80">
-                    {/* Render Clips in this track */}
-                    {trackClips.map((clip) => {
+                    {trackClips.map((clip, index) => {
                       const isSelected = selectedClipId === clip.id;
                       const clipLeft = clip.startTime * zoom;
-                      const clipWidth = Math.max(16, clip.duration * zoom);
+                      const clipWidth = Math.max(18, clip.duration * zoom);
+                      const nextClip = trackClips[index + 1];
+                      const hasJunction = nextClip && Math.abs((clip.startTime + clip.duration) - nextClip.startTime) < 0.08;
+                      const junctionLeft = hasJunction ? (clip.startTime + clip.duration) * zoom : 0;
 
                       return (
-                        <div
-                          key={clip.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectClip(clip.id);
-                          }}
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            onSelectClip(clip.id);
-                            setDraggingClipId(clip.id);
-                            setDragStartX(e.clientX);
-                            setDragInitialTime(clip.startTime);
-                          }}
-                          className={`absolute top-1 bottom-1 rounded-md overflow-hidden cursor-move transition-shadow flex items-center group select-none ${
-                            isSelected
-                              ? 'ring-2 ring-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.4)] z-10'
-                              : 'hover:ring-1 hover:ring-[#38BDF8]'
-                          } ${
-                            clip.type === 'video'
-                              ? 'bg-[#1E293B] border border-[#334155]'
-                              : clip.type === 'text'
-                              ? 'bg-[#854D0E] border border-[#CA8A04]'
-                              : clip.type === 'sticker'
-                              ? 'bg-[#831843] border border-[#DB2777]'
-                              : 'bg-[#064E3B] border border-[#059669]'
-                          }`}
-                          style={{
-                            left: `${clipLeft}px`,
-                            width: `${clipWidth}px`
-                          }}
-                        >
-                          {/* Left Trim Handle */}
+                        <React.Fragment key={clip.id}>
                           <div
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              setTrimmingHandle({ clipId: clip.id, type: 'start' });
-                            }}
-                            className="absolute left-0 top-0 bottom-0 w-2.5 bg-white/20 hover:bg-[#00F0FF] cursor-ew-resize opacity-0 group-hover:opacity-100 z-20 flex items-center justify-center"
+                            key={clip.id}
+                            onClick={(e) => { e.stopPropagation(); onSelectClip(clip.id); }}
+                            onMouseDown={(e) => { e.stopPropagation(); onSelectClip(clip.id); setDraggingClipId(clip.id); setDragStartX(e.clientX); setDragInitialTime(clip.startTime); }}
+                            className={`absolute top-1 bottom-1 rounded-md overflow-hidden cursor-move transition-shadow flex items-center group select-none ${isSelected ? 'ring-2 ring-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.4)] z-10' : 'hover:ring-1 hover:ring-[#38BDF8]'} ${clip.type === 'video' ? 'bg-[#1E293B] border border-[#334155]' : clip.type === 'text' ? 'bg-[#854D0E] border border-[#CA8A04]' : clip.type === 'sticker' ? 'bg-[#831843] border border-[#DB2777]' : 'bg-[#064E3B] border border-[#059669]'}`}
+                            style={{ left: `${clipLeft}px`, width: `${clipWidth}px` }}
                           >
-                            <div className="w-0.5 h-3 bg-white rounded-full"></div>
+                            <div onMouseDown={(e) => { e.stopPropagation(); setTrimmingHandle({ clipId: clip.id, type: 'start' }); }} className="absolute left-0 top-0 bottom-0 w-2.5 bg-white/20 hover:bg-[#00F0FF] cursor-ew-resize opacity-0 group-hover:opacity-100 z-20 flex items-center justify-center"><div className="w-0.5 h-3 bg-white rounded-full" /></div>
+                            <div className="flex items-center gap-1.5 px-2 w-full h-full overflow-hidden">
+                              {clip.thumbnail && <img src={clip.thumbnail} alt={clip.name} referrerPolicy="no-referrer" className="h-full aspect-video object-cover rounded pointer-events-none" />}
+                              <span className="text-[11px] font-semibold text-white truncate drop-shadow-sm">{clip.type === 'text' ? clip.text || clip.name : clip.name}</span>
+                              {clip.effect && clip.effect !== 'none' && <span className="text-[9px] shrink-0" title="Effect applied"><Sparkles className="w-3 h-3 text-[#00F0FF]" /></span>}
+                              <span className="text-[9px] font-mono text-white/70 ml-auto shrink-0">{clip.duration.toFixed(1)}s</span>
+                            </div>
+                            <div onMouseDown={(e) => { e.stopPropagation(); setTrimmingHandle({ clipId: clip.id, type: 'end' }); }} className="absolute right-0 top-0 bottom-0 w-2.5 bg-white/20 hover:bg-[#00F0FF] cursor-ew-resize opacity-0 group-hover:opacity-100 z-20 flex items-center justify-center"><div className="w-0.5 h-3 bg-white rounded-full" /></div>
                           </div>
 
-                          {/* Clip Body Content */}
-                          <div className="flex items-center space-x-1.5 px-2 w-full h-full overflow-hidden">
-                            {clip.thumbnail && (
-                              <img
-                                src={clip.thumbnail}
-                                alt={clip.name}
-                                referrerPolicy="no-referrer"
-                                className="h-full aspect-video object-cover rounded pointer-events-none"
-                              />
-                            )}
-                            <span className="text-[11px] font-semibold text-white truncate drop-shadow-sm">
-                              {clip.type === 'text' ? clip.text || clip.name : clip.name}
-                            </span>
-                            <span className="text-[9px] font-mono text-white/70 ml-auto shrink-0">
-                              {clip.duration.toFixed(1)}s
-                            </span>
-                          </div>
-
-                          {/* Right Trim Handle */}
-                          <div
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              setTrimmingHandle({ clipId: clip.id, type: 'end' });
-                            }}
-                            className="absolute right-0 top-0 bottom-0 w-2.5 bg-white/20 hover:bg-[#00F0FF] cursor-ew-resize opacity-0 group-hover:opacity-100 z-20 flex items-center justify-center"
-                          >
-                            <div className="w-0.5 h-3 bg-white rounded-full"></div>
-                          </div>
-                        </div>
+                          {/* CapCut-style + between adjacent clips: opens Transitions */}
+                          {hasJunction && (
+                            <button
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => { e.stopPropagation(); setTransitionTargetId(nextClip.id); }}
+                              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 w-6 h-6 rounded-full bg-[#1B2430] border-2 border-[#CBD5E1] hover:border-[#00F0FF] hover:bg-[#00F0FF] hover:text-[#0B0D12] text-white flex items-center justify-center shadow-lg transition-all"
+                              style={{ left: `${junctionLeft}px` }}
+                              title="Add transition"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </div>
@@ -392,17 +283,9 @@ export const Timeline: React.FC<TimelineProps> = ({
               })}
             </div>
 
-            {/* Red Scrub Playhead Needle */}
-            <div
-              className="absolute top-0 bottom-0 pointer-events-none z-30 flex flex-col items-center"
-              style={{ left: `${currentTime * zoom}px`, transform: 'translateX(-50%)' }}
-            >
-              {/* Playhead Handle */}
-              <div className="w-3.5 h-4 bg-[#EF4444] rounded-t-xs shadow-md clip-polygon flex items-center justify-center">
-                <div className="w-1 h-1 bg-white rounded-full"></div>
-              </div>
-              {/* Vertical Laser Needle Line */}
-              <div className="w-[1.5px] flex-1 bg-[#EF4444] shadow-[0_0_6px_rgba(239,68,68,0.8)]"></div>
+            <div className="absolute top-0 bottom-0 pointer-events-none z-40 flex flex-col items-center" style={{ left: `${currentTime * zoom}px`, transform: 'translateX(-50%)' }}>
+              <div className="w-3.5 h-4 bg-[#EF4444] rounded-t-xs shadow-md flex items-center justify-center"><div className="w-1 h-1 bg-white rounded-full" /></div>
+              <div className="w-[1.5px] flex-1 bg-[#EF4444] shadow-[0_0_6px_rgba(239,68,68,0.8)]" />
             </div>
           </div>
         </div>
