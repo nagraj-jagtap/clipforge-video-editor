@@ -544,19 +544,23 @@ export default function App() {
           onUpdateSelectedClip={handleUpdateSelectedClip}
         />
 
-        {/* Center Live Video Preview Stage */}
-        <CenterPreview
-          aspectRatio={aspectRatio}
-          currentTime={currentTime}
-          duration={duration}
-          isPlaying={isPlaying}
-          isLooping={isLooping}
-          clips={clips}
-          onPlayPause={() => setIsPlaying(!isPlaying)}
-          onSeek={setCurrentTime}
-          onToggleLoop={() => setIsLooping(!isLooping)}
-          onStepFrame={handleStepFrame}
-        />
+        {/* Compact CapCut-style preview workspace */}
+        <div className="cf-preview-shell min-w-0 flex-1 min-h-0 flex items-center justify-center overflow-hidden bg-[#0B0D12]">
+          <div className="cf-preview-scaled w-[133.333%] h-[133.333%] scale-75 origin-center shrink-0">
+            <CenterPreview
+              aspectRatio={aspectRatio}
+              currentTime={currentTime}
+              duration={duration}
+              isPlaying={isPlaying}
+              isLooping={isLooping}
+              clips={clips}
+              onPlayPause={() => setIsPlaying(!isPlaying)}
+              onSeek={setCurrentTime}
+              onToggleLoop={() => setIsLooping(!isLooping)}
+              onStepFrame={handleStepFrame}
+            />
+          </div>
+        </div>
 
         {/* Right Inspector Panel */}
         <RightPanel
