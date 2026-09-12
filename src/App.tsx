@@ -25,32 +25,21 @@ import { Timeline } from './components/Timeline';
 import { ExportModal } from './components/ExportModal';
 
 export default function App() {
-  // Project settings
   const [projectName, setProjectName] = useState('Untitled Project');
   const [aspectRatio, setAspectRatio] = useState<AspectRatioType>('9:16');
   const [activeTab, setActiveTab] = useState<SidebarTab>('media');
-
-  // Media Library
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(INITIAL_MEDIA_ASSETS.filter((a) => a.type === 'video'));
-
-  // Multi-track state
   const [tracks, setTracks] = useState<TimelineTrack[]>(INITIAL_CREATOR_TRACKS);
-  const [clips, setClips] = useState<TimelineClip[]>([]);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-  // Playback state
+  const [clips, setClips] = useState<TimelineClip[]>(INITIAL_CREATOR_CLIPS);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(INITIAL_CREATOR_CLIPS[0]?.id || null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(15.0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLooping, setIsLooping] = useState(true);
-
-  // Undo / Redo history stacks
   const [historyStack, setHistoryStack] = useState<TimelineClip[][]>([]);
   const [redoStack, setRedoStack] = useState<TimelineClip[][]>([]);
-
-  // Export Modal state
   const [isExportOpen, setIsExportOpen] = useState(false);
 
-  // Push state to undo stack
   const pushHistory = useCallback((currentClips: TimelineClip[]) => {
     setHistoryStack((prev) => [...prev.slice(-20), currentClips]);
     setRedoStack([]);
@@ -72,377 +61,144 @@ export default function App() {
     setClips(next);
   }, [redoStack, clips]);
 
-  // Selected clip helper
   const selectedClip = clips.find((c) => c.id === selectedClipId) || null;
 
-  // Real-time playback loop
   useEffect(() => {
     let animationFrameId: number;
     let lastTimestamp = performance.now();
-
     const loop = (timestamp: number) => {
       const delta = (timestamp - lastTimestamp) / 1000;
       lastTimestamp = timestamp;
-
       if (isPlaying) {
         setCurrentTime((prev) => {
           const next = prev + delta;
           if (next >= duration) {
-            if (isLooping) {
-              return 0;
-            } else {
-              setIsPlaying(false);
-              return duration;
-            }
+            if (isLooping) return 0;
+            setIsPlaying(false);
+            return duration;
           }
           return next;
         });
       }
-
       animationFrameId = requestAnimationFrame(loop);
     };
-
     animationFrameId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrameId);
   }, [isPlaying, duration, isLooping]);
 
-  // Recalculate duration whenever clips change
   useEffect(() => {
     let maxEndTime = 10.0;
     for (const clip of clips) {
       const end = clip.startTime + clip.duration;
-      if (end > maxEndTime) {
-        maxEndTime = end;
-      }
+      if (end > maxEndTime) maxEndTime = end;
     }
     setDuration(Math.ceil(maxEndTime + 1));
   }, [clips]);
 
-  // Update clips with undo record
   const handleUpdateClips = useCallback((newClips: TimelineClip[]) => {
     pushHistory(clips);
     setClips(newClips);
   }, [clips, pushHistory]);
 
-  // Update selected clip properties
   const handleUpdateSelectedClip = useCallback((updates: Partial<TimelineClip>) => {
     if (!selectedClipId) return;
     pushHistory(clips);
-    setClips((prev) =>
-      prev.map((c) => (c.id === selectedClipId ? { ...c, ...updates } : c))
-    );
+    setClips((prev) => prev.map((c) => (c.id === selectedClipId ? { ...c, ...updates } : c)));
   }, [selectedClipId, clips, pushHistory]);
 
-  // Upload Media File
   const handleUploadMedia = (file: File) => {
     const url = URL.createObjectURL(file);
     const isVideo = file.type.startsWith('video');
     const isAudio = file.type.startsWith('audio');
-
     if (isVideo) {
       const v = document.createElement('video');
       v.src = url;
       v.onloadedmetadata = () => {
-        const newAsset: MediaAsset = {
-          id: `media-upload-${Date.now()}`,
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          type: 'video',
-          url,
-          duration: v.duration || 5.0,
-          thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=320&auto=format&fit=crop&q=80',
-          width: v.videoWidth || 1080,
-          height: v.videoHeight || 1920
-        };
+        const newAsset: MediaAsset = { id: `media-upload-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ''), type: 'video', url, duration: v.duration || 5, thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=320&auto=format&fit=crop&q=80', width: v.videoWidth || 1080, height: v.videoHeight || 1920 };
         setMediaAssets((prev) => [newAsset, ...prev]);
         handleAddMediaToTimeline(newAsset);
-      };} else if (file.type.startsWith('image')) {
-       const img = new Image();
-    img.onload = () => {
-      const newAsset: MediaAsset = {
-        id: `media-upload-${Date.now()}`,
-        name: file.name.replace(/\.[^/.]+$/, ''),
-        type: 'image',
-        url,
-        duration: 5.0,
-        thumbnail: url,
-        width: img.width,
-        height: img.height
       };
-
-      setMediaAssets((prev) => [newAsset, ...prev]);
-      handleAddMediaToTimeline(newAsset);
-    };
-    img.src = url;
+    } else if (file.type.startsWith('image')) {
+      const img = new Image();
+      img.onload = () => {
+        const newAsset: MediaAsset = { id: `media-upload-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ''), type: 'image', url, duration: 5, thumbnail: url, width: img.width, height: img.height };
+        setMediaAssets((prev) => [newAsset, ...prev]);
+        handleAddMediaToTimeline(newAsset);
+      };
+      img.src = url;
     } else if (isAudio) {
-      handleAddAudioToTimeline({
-        name: file.name.replace(/\.[^/.]+$/, ''),
-        url,
-        duration: 15.0
-      });
+      handleAddAudioToTimeline({ name: file.name.replace(/\.[^/.]+$/, ''), url, duration: 15 });
     }
   };
 
-  // Add Media Clip to timeline
   const handleAddMediaToTimeline = (asset: MediaAsset) => {
     pushHistory(clips);
-    // Find latest video clip end time
     const videoClips = clips.filter((c) => c.type === 'video');
     let start = 0;
     if (videoClips.length > 0) {
       const last = videoClips[videoClips.length - 1];
       start = last.startTime + last.duration;
     }
-
-    const newClip: TimelineClip = {
-      id: `clip-video-${Date.now()}`,
-      name: asset.name,
-      type: 'video',
-      trackId: 'track-video',
-      startTime: start,
-      duration: Math.min(10.0, asset.duration || 5.0),
-      trimIn: 0,
-     sourceUrl: asset.type === 'video' ? asset.url : undefined,
-      thumbnail: asset.thumbnail,
-      speed: 1.0,
-      volume: 100,
-      muted: false,
-      fadeIn: 0,
-      fadeOut: 0,
-      cropMode: 'fill',
-      scale: 100,
-      rotation: 0,
-      flipH: false,
-      flipV: false,
-      opacity: 100,
-      filter: 'none',
-      effect: 'none',
-      effectIntensity: 50,
-      transition: 'none',
-      transitionDuration: 0.5,
-      adjustments: { ...DEFAULT_ADJUSTMENTS },
-      posX: 0,
-      posY: 0
-    };
-
+    const newClip: TimelineClip = { id: `clip-video-${Date.now()}`, name: asset.name, type: 'video', trackId: 'track-video', startTime: start, duration: Math.min(10, asset.duration || 5), trimIn: 0, sourceUrl: asset.type === 'video' ? asset.url : undefined, thumbnail: asset.thumbnail, speed: 1, volume: 100, muted: false, fadeIn: 0, fadeOut: 0, cropMode: 'fill', scale: 100, rotation: 0, flipH: false, flipV: false, opacity: 100, filter: 'none', effect: 'none', effectIntensity: 50, transition: 'none', transitionDuration: 0.5, adjustments: { ...DEFAULT_ADJUSTMENTS }, posX: 0, posY: 0 };
     setClips((prev) => [...prev, newClip]);
     setSelectedClipId(newClip.id);
   };
 
-  // Add Text to timeline
   const handleAddTextToTimeline = (presetText?: string, styleOptions?: Partial<TimelineClip>) => {
     pushHistory(clips);
-    const newTextClip: TimelineClip = {
-      id: `clip-text-${Date.now()}`,
-      name: presetText || 'Heading Title',
-      type: 'text',
-      trackId: 'track-text',
-      startTime: currentTime,
-      duration: 3.5,
-      trimIn: 0,
-      text: presetText || 'Heading Title',
-      fontFamily: styleOptions?.fontFamily || 'Montserrat',
-      fontSize: styleOptions?.fontSize || 34,
-      textColor: styleOptions?.textColor || '#FFFFFF',
-      isBold: styleOptions?.isBold ?? true,
-      isItalic: styleOptions?.isItalic ?? false,
-      strokeColor: styleOptions?.strokeColor || '#000000',
-      strokeWidth: styleOptions?.strokeWidth ?? 2,
-      shadowColor: styleOptions?.shadowColor || 'rgba(0,0,0,0.8)',
-      shadowBlur: styleOptions?.shadowBlur ?? 8,
-      textAnimation: styleOptions?.textAnimation || 'fade',
-      posX: 0,
-      posY: 25,
-      scale: 100,
-      rotation: 0,
-      flipH: false,
-      flipV: false,
-      opacity: 100,
-      speed: 1.0,
-      volume: 100,
-      muted: false,
-      fadeIn: 0,
-      fadeOut: 0,
-      cropMode: 'fill',
-      filter: 'none',
-      effect: 'none',
-      effectIntensity: 50,
-      transition: 'none',
-      transitionDuration: 0.5,
-      adjustments: { ...DEFAULT_ADJUSTMENTS }
-    };
-
+    const newTextClip: TimelineClip = { id: `clip-text-${Date.now()}`, name: presetText || 'Heading Title', type: 'text', trackId: 'track-text', startTime: currentTime, duration: 3.5, trimIn: 0, text: presetText || 'Heading Title', fontFamily: styleOptions?.fontFamily || 'Montserrat', fontSize: styleOptions?.fontSize || 34, textColor: styleOptions?.textColor || '#FFFFFF', isBold: styleOptions?.isBold ?? true, isItalic: styleOptions?.isItalic ?? false, strokeColor: styleOptions?.strokeColor || '#000000', strokeWidth: styleOptions?.strokeWidth ?? 2, shadowColor: styleOptions?.shadowColor || 'rgba(0,0,0,0.8)', shadowBlur: styleOptions?.shadowBlur ?? 8, textAnimation: styleOptions?.textAnimation || 'fade', posX: 0, posY: 25, scale: 100, rotation: 0, flipH: false, flipV: false, opacity: 100, speed: 1, volume: 100, muted: false, fadeIn: 0, fadeOut: 0, cropMode: 'fill', filter: 'none', effect: 'none', effectIntensity: 50, transition: 'none', transitionDuration: 0.5, adjustments: { ...DEFAULT_ADJUSTMENTS } };
     setClips((prev) => [...prev, newTextClip]);
     setSelectedClipId(newTextClip.id);
   };
 
-  // Add Sticker to timeline
   const handleAddStickerToTimeline = (sticker: string, category: 'emoji' | 'badge' | 'shape') => {
     pushHistory(clips);
-    const newStickerClip: TimelineClip = {
-      id: `clip-sticker-${Date.now()}`,
-      name: category === 'badge' ? sticker : `Sticker ${sticker}`,
-      type: 'sticker',
-      trackId: 'track-stickers',
-      startTime: currentTime,
-      duration: 3.0,
-      trimIn: 0,
-      stickerContent: sticker,
-      stickerCategory: category,
-      scale: 100,
-      rotation: 0,
-      posX: 0,
-      posY: 0,
-      flipH: false,
-      flipV: false,
-      opacity: 100,
-      speed: 1.0,
-      volume: 100,
-      muted: false,
-      fadeIn: 0,
-      fadeOut: 0,
-      cropMode: 'fill',
-      filter: 'none',
-      effect: 'none',
-      effectIntensity: 50,
-      transition: 'none',
-      transitionDuration: 0.5,
-      adjustments: { ...DEFAULT_ADJUSTMENTS }
-    };
-
+    const newStickerClip: TimelineClip = { id: `clip-sticker-${Date.now()}`, name: category === 'badge' ? sticker : `Sticker ${sticker}`, type: 'sticker', trackId: 'track-stickers', startTime: currentTime, duration: 3, trimIn: 0, stickerContent: sticker, stickerCategory: category, scale: 100, rotation: 0, posX: 0, posY: 0, flipH: false, flipV: false, opacity: 100, speed: 1, volume: 100, muted: false, fadeIn: 0, fadeOut: 0, cropMode: 'fill', filter: 'none', effect: 'none', effectIntensity: 50, transition: 'none', transitionDuration: 0.5, adjustments: { ...DEFAULT_ADJUSTMENTS } };
     setClips((prev) => [...prev, newStickerClip]);
     setSelectedClipId(newStickerClip.id);
   };
 
-  // Add Audio to timeline
   const handleAddAudioToTimeline = (audioItem: { name: string; url: string; duration: number }) => {
     pushHistory(clips);
-    const newAudioClip: TimelineClip = {
-      id: `clip-audio-${Date.now()}`,
-      name: audioItem.name,
-      type: 'audio',
-      trackId: 'track-audio-music',
-      startTime: currentTime,
-      duration: audioItem.duration,
-      trimIn: 0,
-      sourceUrl: audioItem.url,
-      volume: 85,
-      muted: false,
-      fadeIn: 0.5,
-      fadeOut: 0.5,
-      speed: 1.0,
-      cropMode: 'fill',
-      scale: 100,
-      rotation: 0,
-      flipH: false,
-      flipV: false,
-      opacity: 100,
-      filter: 'none',
-      effect: 'none',
-      effectIntensity: 50,
-      transition: 'none',
-      transitionDuration: 0.5,
-      adjustments: { ...DEFAULT_ADJUSTMENTS },
-      posX: 0,
-      posY: 0
-    };
-
+    const newAudioClip: TimelineClip = { id: `clip-audio-${Date.now()}`, name: audioItem.name, type: 'audio', trackId: 'track-audio-music', startTime: currentTime, duration: audioItem.duration, trimIn: 0, sourceUrl: audioItem.url, volume: 85, muted: false, fadeIn: 0.5, fadeOut: 0.5, speed: 1, cropMode: 'fill', scale: 100, rotation: 0, flipH: false, flipV: false, opacity: 100, filter: 'none', effect: 'none', effectIntensity: 50, transition: 'none', transitionDuration: 0.5, adjustments: { ...DEFAULT_ADJUSTMENTS }, posX: 0, posY: 0 };
     setClips((prev) => [...prev, newAudioClip]);
     setSelectedClipId(newAudioClip.id);
   };
 
-  // Split selected clip at playhead
   const handleSplitClip = useCallback(() => {
     if (!selectedClip) return;
-    // Check if playhead intersects the clip
-    if (currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) {
-      return;
-    }
-
+    if (currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) return;
     pushHistory(clips);
-
     const splitOffset = currentTime - selectedClip.startTime;
-    const clip1: TimelineClip = {
-      ...selectedClip,
-      duration: splitOffset
-    };
-
-    const clip2: TimelineClip = {
-      ...selectedClip,
-      id: `${selectedClip.id}-split-${Date.now()}`,
-      name: `${selectedClip.name} (Part 2)`,
-      startTime: currentTime,
-      duration: selectedClip.duration - splitOffset,
-      trimIn: selectedClip.trimIn + splitOffset * (selectedClip.speed || 1.0)
-    };
-
-    setClips((prev) =>
-      prev.map((c) => (c.id === selectedClip.id ? clip1 : c)).concat(clip2)
-    );
+    const clip1: TimelineClip = { ...selectedClip, duration: splitOffset };
+    const clip2: TimelineClip = { ...selectedClip, id: `${selectedClip.id}-split-${Date.now()}`, name: `${selectedClip.name} (Part 2)`, startTime: currentTime, duration: selectedClip.duration - splitOffset, trimIn: selectedClip.trimIn + splitOffset * (selectedClip.speed || 1) };
+    setClips((prev) => prev.map((c) => (c.id === selectedClip.id ? clip1 : c)).concat(clip2));
     setSelectedClipId(clip2.id);
   }, [selectedClip, currentTime, clips, pushHistory]);
 
-  // Trim Start to playhead
   const handleTrimClipStart = useCallback(() => {
     if (!selectedClip) return;
-    if (currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) {
-      return;
-    }
+    if (currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) return;
     pushHistory(clips);
     const trimDelta = currentTime - selectedClip.startTime;
-    const newDuration = selectedClip.duration - trimDelta;
-
-    setClips((prev) =>
-      prev.map((c) =>
-        c.id === selectedClip.id
-          ? {
-              ...c,
-              startTime: currentTime,
-              duration: newDuration,
-              trimIn: c.trimIn + trimDelta * (c.speed || 1.0)
-            }
-          : c
-      )
-    );
+    setClips((prev) => prev.map((c) => c.id === selectedClip.id ? { ...c, startTime: currentTime, duration: c.duration - trimDelta, trimIn: c.trimIn + trimDelta * (c.speed || 1) } : c));
   }, [selectedClip, currentTime, clips, pushHistory]);
 
-  // Trim End to playhead
   const handleTrimClipEnd = useCallback(() => {
     if (!selectedClip) return;
-    if (currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) {
-      return;
-    }
+    if (currentTime <= selectedClip.startTime || currentTime >= selectedClip.startTime + selectedClip.duration) return;
     pushHistory(clips);
-    const newDuration = currentTime - selectedClip.startTime;
-
-    setClips((prev) =>
-      prev.map((c) =>
-        c.id === selectedClip.id
-          ? {
-              ...c,
-              duration: newDuration
-            }
-          : c
-      )
-    );
+    setClips((prev) => prev.map((c) => c.id === selectedClip.id ? { ...c, duration: currentTime - c.startTime } : c));
   }, [selectedClip, currentTime, clips, pushHistory]);
 
-  // Duplicate selected clip
   const handleDuplicateClip = useCallback(() => {
     if (!selectedClip) return;
     pushHistory(clips);
-
-    const duplicated: TimelineClip = {
-      ...selectedClip,
-      id: `${selectedClip.id}-copy-${Date.now()}`,
-      name: `${selectedClip.name} (Copy)`,
-      startTime: selectedClip.startTime + selectedClip.duration + 0.1
-    };
-
+    const duplicated: TimelineClip = { ...selectedClip, id: `${selectedClip.id}-copy-${Date.now()}`, name: `${selectedClip.name} (Copy)`, startTime: selectedClip.startTime + selectedClip.duration + 0.1 };
     setClips((prev) => [...prev, duplicated]);
     setSelectedClipId(duplicated.id);
   }, [selectedClip, clips, pushHistory]);
 
-  // Delete selected clip
   const handleDeleteClip = useCallback(() => {
     if (!selectedClipId) return;
     pushHistory(clips);
@@ -450,157 +206,38 @@ export default function App() {
     setSelectedClipId(null);
   }, [selectedClipId, clips, pushHistory]);
 
-  // Step Frame
-  const handleStepFrame = (delta: number) => {
-    setCurrentTime((prev) => Math.max(0, Math.min(duration, prev + delta)));
-  };
+  const handleStepFrame = (delta: number) => setCurrentTime((prev) => Math.max(0, Math.min(duration, prev + delta)));
 
-  // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is currently typing in an input or textarea
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
-        return;
-      }
-
-      // Space: Play / Pause
-      if (e.code === 'Space') {
-        e.preventDefault();
-        setIsPlaying((p) => !p);
-      }
-      // Arrow Left / Right: Frame step
-      else if (e.code === 'ArrowLeft') {
-        e.preventDefault();
-        handleStepFrame(-1 / 30);
-      } else if (e.code === 'ArrowRight') {
-        e.preventDefault();
-        handleStepFrame(1 / 30);
-      }
-      // Delete or Backspace
-      else if (e.code === 'Delete' || e.code === 'Backspace') {
-        e.preventDefault();
-        handleDeleteClip();
-      }
-      // 'S' key: Split at playhead
-      else if (e.code === 'KeyS' && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        handleSplitClip();
-      }
-      // Ctrl+Z: Undo
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        handleUndo();
-      }
-      // Ctrl+Y or Ctrl+Shift+Z: Redo
-      else if (
-        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
-      ) {
-        e.preventDefault();
-        handleRedo();
-      }
-      // Ctrl+D: Duplicate
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        handleDuplicateClip();
-      }
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) return;
+      if (e.code === 'Space') { e.preventDefault(); setIsPlaying((p) => !p); }
+      else if (e.code === 'ArrowLeft') { e.preventDefault(); handleStepFrame(-1 / 30); }
+      else if (e.code === 'ArrowRight') { e.preventDefault(); handleStepFrame(1 / 30); }
+      else if (e.code === 'Delete' || e.code === 'Backspace') { e.preventDefault(); handleDeleteClip(); }
+      else if (e.code === 'KeyS' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handleSplitClip(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
+      else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')) { e.preventDefault(); handleRedo(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); handleDuplicateClip(); }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleDeleteClip, handleSplitClip, handleUndo, handleRedo, handleDuplicateClip]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0B0D12] text-white overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
-      {/* Top Navigation Bar */}
-      <Header
-        projectName={projectName}
-        onUpdateProjectName={setProjectName}
-        aspectRatio={aspectRatio}
-        onChangeAspectRatio={setAspectRatio}
-        canUndo={historyStack.length > 0}
-        canRedo={redoStack.length > 0}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onSave={() => {
-          localStorage.setItem('clipforge_project', JSON.stringify({ projectName, clips, aspectRatio }));
-        }}
-        onOpenExport={() => setIsExportOpen(true)}
-      />
-
-      {/* Main Workspace Center Section */}
+      <Header projectName={projectName} onUpdateProjectName={setProjectName} aspectRatio={aspectRatio} onChangeAspectRatio={setAspectRatio} canUndo={historyStack.length > 0} canRedo={redoStack.length > 0} onUndo={handleUndo} onRedo={handleRedo} onSave={() => localStorage.setItem('clipforge_project', JSON.stringify({ projectName, clips, aspectRatio }))} onOpenExport={() => setIsExportOpen(true)} />
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar (Media, Audio, Text, Stickers, Effects, Transitions, Filters, Adjust) */}
-        <LeftSidebar
-          activeTab={activeTab}
-          onSelectTab={setActiveTab}
-          mediaAssets={mediaAssets}
-          onUploadMedia={handleUploadMedia}
-          onAddMediaToTimeline={handleAddMediaToTimeline}
-          onAddTextToTimeline={handleAddTextToTimeline}
-          onAddStickerToTimeline={handleAddStickerToTimeline}
-          onAddAudioToTimeline={handleAddAudioToTimeline}
-          selectedClip={selectedClip}
-          onUpdateSelectedClip={handleUpdateSelectedClip}
-        />
-
-        {/* Compact CapCut-style preview workspace */}
+        <LeftSidebar activeTab={activeTab} onSelectTab={setActiveTab} mediaAssets={mediaAssets} onUploadMedia={handleUploadMedia} onAddMediaToTimeline={handleAddMediaToTimeline} onAddTextToTimeline={handleAddTextToTimeline} onAddStickerToTimeline={handleAddStickerToTimeline} onAddAudioToTimeline={handleAddAudioToTimeline} selectedClip={selectedClip} onUpdateSelectedClip={handleUpdateSelectedClip} />
         <div className="cf-preview-shell min-w-0 flex-1 min-h-0 flex items-center justify-center overflow-hidden bg-[#0B0D12]">
           <div className="cf-preview-scaled w-[133.333%] h-[133.333%] scale-75 origin-center shrink-0">
-            <CenterPreview
-              aspectRatio={aspectRatio}
-              currentTime={currentTime}
-              duration={duration}
-              isPlaying={isPlaying}
-              isLooping={isLooping}
-              clips={clips}
-              onPlayPause={() => setIsPlaying(!isPlaying)}
-              onSeek={setCurrentTime}
-              onToggleLoop={() => setIsLooping(!isLooping)}
-              onStepFrame={handleStepFrame}
-            />
+            <CenterPreview aspectRatio={aspectRatio} currentTime={currentTime} duration={duration} isPlaying={isPlaying} isLooping={isLooping} clips={clips} onPlayPause={() => setIsPlaying(!isPlaying)} onSeek={setCurrentTime} onToggleLoop={() => setIsLooping(!isLooping)} onStepFrame={handleStepFrame} />
           </div>
         </div>
-
-        {/* Right Inspector Panel */}
-        <RightPanel
-          selectedClip={selectedClip}
-          onUpdateClip={handleUpdateSelectedClip}
-          onDuplicateClip={handleDuplicateClip}
-          onDeleteClip={handleDeleteClip}
-          onSplitClip={handleSplitClip}
-          aspectRatio={aspectRatio}
-          onChangeAspectRatio={setAspectRatio}
-          duration={duration}
-        />
+        <RightPanel selectedClip={selectedClip} onUpdateClip={handleUpdateSelectedClip} onDuplicateClip={handleDuplicateClip} onDeleteClip={handleDeleteClip} onSplitClip={handleSplitClip} aspectRatio={aspectRatio} onChangeAspectRatio={setAspectRatio} duration={duration} />
       </div>
-
-      {/* Bottom Multi-Track Timeline */}
-      <Timeline
-        tracks={tracks}
-        clips={clips}
-        currentTime={currentTime}
-        duration={duration}
-        selectedClipId={selectedClipId}
-        onSelectClip={setSelectedClipId}
-        onSeek={setCurrentTime}
-        onUpdateClips={handleUpdateClips}
-        onSplitClip={handleSplitClip}
-        onTrimClipStart={handleTrimClipStart}
-        onTrimClipEnd={handleTrimClipEnd}
-        onDuplicateClip={handleDuplicateClip}
-        onDeleteClip={handleDeleteClip}
-      />
-
-      {/* Real Browser Video Export Modal */}
-      <ExportModal
-        isOpen={isExportOpen}
-        onClose={() => setIsExportOpen(false)}
-        clips={clips}
-        duration={duration}
-        aspectRatio={aspectRatio}
-        projectName={projectName}
-      />
+      <Timeline tracks={tracks} clips={clips} currentTime={currentTime} duration={duration} selectedClipId={selectedClipId} onSelectClip={setSelectedClipId} onSeek={setCurrentTime} onUpdateClips={handleUpdateClips} onSplitClip={handleSplitClip} onTrimClipStart={handleTrimClipStart} onTrimClipEnd={handleTrimClipEnd} onDuplicateClip={handleDuplicateClip} onDeleteClip={handleDeleteClip} />
+      <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} clips={clips} duration={duration} aspectRatio={aspectRatio} projectName={projectName} />
     </div>
   );
 }
