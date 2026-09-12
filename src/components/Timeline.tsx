@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Scissors, Trash2, Copy, ZoomIn, ZoomOut, Magnet, Video, Music, Type, Smile, ChevronRight, ChevronLeft, Plus, X, Sparkles, Wand2 } from 'lucide-react';
+import { Scissors, Trash2, Copy, ZoomIn, ZoomOut, Magnet, Video, Music, Type, Smile, ChevronRight, ChevronLeft, Plus, X, Wand2, Layers3, Image as ImageIcon } from 'lucide-react';
 import { TimelineClip, TimelineTrack } from '../types';
 import { formatTimecode } from '../utils/videoExporter';
 import { CREATOR_TRANSITIONS, CREATOR_EFFECTS } from '../data/creatorAssets';
@@ -95,70 +95,104 @@ export const Timeline: React.FC<TimelineProps> = ({ tracks, clips, currentTime, 
     onSelectClip(clipId);
   };
 
+  const targetClip = effectsTargetId ? clips.find((c) => c.id === effectsTargetId) : null;
+  const targetImage = targetClip?.thumbnail || targetClip?.sourceUrl || '';
   const previewClassForTransition = (id: TimelineClip['transition']) => `cf-transition-preview cf-${id}`;
+  const previewClassForEffect = (id: TimelineClip['effect']) => `cf-effect-preview cf-effect-${id}`;
 
   return (
     <div className="h-64 bg-[#12141A] border-t border-[#222733] flex flex-col shrink-0 select-none overflow-hidden z-20 relative">
       <style>{`
         @keyframes cfFadeIn { 0%,35%{opacity:0} 65%,100%{opacity:1} }
-        @keyframes cfDissolve { 0%,20%{opacity:0;filter:blur(5px)} 55%{opacity:.55;filter:blur(1px)} 100%{opacity:1;filter:blur(0)} }
+        @keyframes cfDissolve { 0%,20%{opacity:0;filter:blur(7px)} 55%{opacity:.6;filter:blur(2px)} 100%{opacity:1;filter:blur(0)} }
         @keyframes cfSlideL { 0%{transform:translateX(100%);opacity:0} 45%,100%{transform:translateX(0);opacity:1} }
         @keyframes cfSlideR { 0%{transform:translateX(-100%);opacity:0} 45%,100%{transform:translateX(0);opacity:1} }
-        @keyframes cfZoom { 0%{transform:scale(.35);opacity:0} 55%,100%{transform:scale(1);opacity:1} }
+        @keyframes cfZoomWarp { 0%{transform:scale(.45);opacity:0} 55%,100%{transform:scale(1);opacity:1} }
         @keyframes cfWipe { 0%{clip-path:inset(0 100% 0 0)} 55%,100%{clip-path:inset(0 0 0 0)} }
-        @keyframes cfFlash { 0%,38%{opacity:0} 45%{opacity:1} 52%,100%{opacity:0} }
-        @keyframes cfBlur { 0%{filter:blur(9px);opacity:.2} 65%,100%{filter:blur(0);opacity:1} }
+        @keyframes cfFlash { 0%,38%{opacity:.1} 45%{opacity:1;filter:brightness(2)} 52%,100%{opacity:1;filter:brightness(1)} }
+        @keyframes cfBlurIn { 0%{filter:blur(12px);opacity:.25} 65%,100%{filter:blur(0);opacity:1} }
         @keyframes cfSpin { 0%{transform:rotate(-70deg) scale(.45);opacity:0} 65%,100%{transform:rotate(0) scale(1);opacity:1} }
-        .cf-preview-stage{position:relative;height:46px;border-radius:7px;overflow:hidden;background:linear-gradient(135deg,#202A3A,#0B0D12);border:1px solid #303A4C}
-        .cf-preview-a,.cf-preview-b{position:absolute;inset:7px;width:42%;border-radius:4px;background:linear-gradient(135deg,#38BDF8,#7C3AED)}
-        .cf-preview-b{left:auto;right:7px;background:linear-gradient(135deg,#F97316,#EC4899);opacity:.9}
-        .cf-preview-main{position:absolute;inset:7px;left:50%;width:42%;border-radius:4px;background:linear-gradient(135deg,#00F0FF,#2563EB);transform-origin:center}
-        .cf-fade .cf-preview-main{animation:cfFadeIn 1.2s infinite}
-        .cf-dissolve .cf-preview-main{animation:cfDissolve 1.2s infinite}
-        .cf-slideLeft .cf-preview-main{animation:cfSlideL 1.2s infinite}
-        .cf-slideRight .cf-preview-main{animation:cfSlideR 1.2s infinite}
-        .cf-zoom .cf-preview-main{animation:cfZoom 1.2s infinite}
-        .cf-wipe .cf-preview-main{animation:cfWipe 1.2s infinite}
-        .cf-flash .cf-preview-main{animation:cfFlash 1.2s infinite}
-        .cf-blur .cf-preview-main{animation:cfBlur 1.2s infinite}
-        .cf-spin .cf-preview-main{animation:cfSpin 1.2s infinite}
-        .cf-none .cf-preview-main{display:none}
+        @keyframes cfShake { 0%,100%{transform:translate(0,0) scale(1)} 20%{transform:translate(-3px,2px) scale(1.02)} 40%{transform:translate(3px,-2px) scale(1.02)} 60%{transform:translate(-2px,-2px) scale(1.01)} 80%{transform:translate(2px,2px) scale(1.02)} }
+        @keyframes cfGlitch { 0%,100%{transform:none;filter:none} 18%{transform:translate(-2px,0);filter:hue-rotate(30deg)} 22%{transform:translate(2px,0);filter:hue-rotate(-25deg)} 46%{transform:translate(0,1px);filter:contrast(1.25)} 50%{transform:translate(-3px,0);filter:saturate(1.7)} 54%{transform:none;filter:none} }
+        @keyframes cfRgb { 0%,100%{filter:none;transform:none} 35%{filter:drop-shadow(-3px 0 0 rgba(255,0,0,.7)) drop-shadow(3px 0 0 rgba(0,255,255,.7));transform:translateX(-1px)} 55%{filter:drop-shadow(3px 0 0 rgba(255,0,0,.7)) drop-shadow(-3px 0 0 rgba(0,255,255,.7));transform:translateX(1px)} }
+        @keyframes cfVhs { 0%,100%{filter:contrast(1) saturate(1)} 35%{filter:contrast(1.2) saturate(.75) sepia(.08)} 55%{filter:contrast(.9) saturate(1.2) sepia(.12)} }
+        @keyframes cfGrain { 0%,100%{filter:contrast(1)} 50%{filter:contrast(1.18) brightness(.96)} }
+        @keyframes cfPixel { 0%,100%{filter:none} 45%{filter:contrast(1.35) saturate(1.25)} }
+        @keyframes cfNoise { 0%,100%{filter:contrast(1)} 30%{filter:contrast(1.4) brightness(1.1)} 34%{filter:contrast(.8) brightness(.9)} 70%{filter:contrast(1.25)} }
+        @keyframes cfFlashEffect { 0%,70%,100%{filter:none} 75%{filter:brightness(2.2)} 80%{filter:brightness(1)} }
+        @keyframes cfBeatZoom { 0%,100%{transform:scale(1)} 50%{transform:scale(1.07)} }
+        @keyframes cfDiamond { 0%,100%{transform:scale(1) rotate(0deg);filter:none} 35%{transform:scale(1.08) rotate(.7deg);filter:saturate(1.35) contrast(1.15) blur(.4px)} 65%{transform:scale(.98) rotate(-.7deg);filter:saturate(1.5) contrast(1.2)} }
+        .cf-preview-stage{position:relative;height:58px;border-radius:7px;overflow:hidden;background:#0B0D12;border:1px solid #303A4C}
+        .cf-preview-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform-origin:center;will-change:transform,filter,opacity,clip-path}
+        .cf-preview-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#64748B;background:linear-gradient(135deg,#202A3A,#0B0D12)}
+        .cf-fade .cf-preview-image{animation:cfFadeIn 1.2s infinite}
+        .cf-dissolve .cf-preview-image{animation:cfDissolve 1.2s infinite}
+        .cf-slideLeft .cf-preview-image{animation:cfSlideL 1.2s infinite}
+        .cf-slideRight .cf-preview-image{animation:cfSlideR 1.2s infinite}
+        .cf-zoom .cf-preview-image{animation:cfZoomWarp 1.2s infinite}
+        .cf-wipe .cf-preview-image{animation:cfWipe 1.2s infinite}
+        .cf-flash .cf-preview-image{animation:cfFlash 1.2s infinite}
+        .cf-blur .cf-preview-image{animation:cfBlurIn 1.2s infinite}
+        .cf-spin .cf-preview-image{animation:cfSpin 1.2s infinite}
+        .cf-effect-glitch .cf-preview-image{animation:cfGlitch 1s infinite}
+        .cf-effect-vhs .cf-preview-image{animation:cfVhs 1.6s infinite}
+        .cf-effect-shake .cf-preview-image{animation:cfShake .7s infinite}
+        .cf-effect-blur .cf-preview-image{animation:cfBlurIn 1.2s infinite}
+        .cf-effect-rgbSplit .cf-preview-image{animation:cfRgb 1s infinite}
+        .cf-effect-flash .cf-preview-image{animation:cfFlashEffect 1.1s infinite}
+        .cf-effect-zoom .cf-preview-image{animation:cfBeatZoom .8s infinite}
+        .cf-effect-filmGrain .cf-preview-image{animation:cfGrain 1.3s infinite}
+        .cf-effect-pixelate .cf-preview-image{animation:cfPixel 1.1s infinite}
+        .cf-effect-noise .cf-preview-image{animation:cfNoise .9s infinite}
+        .cf-effect-diamond .cf-preview-image{animation:cfDiamond 1.25s infinite}
+        .cf-none .cf-preview-image,.cf-effect-none .cf-preview-image{animation:none}
         .cf-transition-plus{box-shadow:0 0 0 0 rgba(0,240,255,.5);animation:cfPlusPulse 1.7s infinite}
         @keyframes cfPlusPulse{0%,100%{box-shadow:0 0 0 0 rgba(0,240,255,0)}50%{box-shadow:0 0 0 5px rgba(0,240,255,.08)}}
       `}</style>
 
       {effectsTargetId && (
-        <div className="absolute top-10 right-3 z-50 w-[350px] max-h-[calc(100%-48px)] overflow-y-auto rounded-xl border border-[#334155] bg-[#11151D] shadow-2xl shadow-black/60 p-3">
+        <div className="absolute top-10 right-3 z-50 w-[360px] max-h-[calc(100%-48px)] overflow-y-auto rounded-xl border border-[#334155] bg-[#11151D] shadow-2xl shadow-black/60 p-3">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-xs font-bold text-white">Add to clip</p>
-              <p className="text-[9px] text-[#64748B]">Premium-style Transitions & Effects</p>
+              <p className="text-xs font-bold text-white">Transitions & Effects</p>
+              <p className="text-[9px] text-[#64748B]">Live preview using the selected clip</p>
             </div>
             <button onClick={() => setEffectsTargetId(null)} className="p-1 rounded hover:bg-[#222733] text-[#94A3B8] hover:text-white"><X className="w-3.5 h-3.5" /></button>
           </div>
 
+          <div className="mb-3 rounded-lg border border-[#262C3A] bg-[#0B0D12] p-2">
+            <div className="flex items-center gap-1.5 mb-1.5 text-[#00F0FF]"><ImageIcon className="w-3.5 h-3.5" /><span className="text-[10px] font-semibold">Clip preview</span></div>
+            <div className="h-28 rounded-md overflow-hidden bg-[#151821] relative">
+              {targetImage ? <img src={targetImage} alt="Selected clip preview" referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[#64748B] text-[10px]">Add a video or image to preview it here</div>}
+            </div>
+          </div>
+
           <div className="mb-3">
-            <div className="flex items-center gap-1.5 mb-2 text-[#00F0FF]"><LayersIcon /><span className="text-[11px] font-bold">Transitions</span><span className="text-[8px] text-[#64748B] ml-auto">Animated preview</span></div>
+            <div className="flex items-center gap-1.5 mb-2 text-[#00F0FF]"><Layers3 className="w-3.5 h-3.5" /><span className="text-[11px] font-bold">Transitions</span><span className="text-[8px] text-[#64748B] ml-auto">Animated</span></div>
             <div className="grid grid-cols-2 gap-2">
               {CREATOR_TRANSITIONS.map((trans) => {
                 const target = clips.find((c) => c.id === effectsTargetId);
                 const active = target?.transition === trans.id;
                 return <button key={trans.id} onClick={() => applyTransition(effectsTargetId, trans.id)} className={`p-1.5 rounded-lg border text-left transition-all ${active ? 'bg-[#00F0FF]/15 border-[#00F0FF] text-[#00F0FF]' : 'bg-[#171B24] border-[#262C3A] text-white hover:border-[#00F0FF]/60'}`}>
-                  <div className={previewClassForTransition(trans.id)}><div className="cf-preview-a"/><div className="cf-preview-b"/><div className="cf-preview-main"/></div>
-                  <div className="mt-1 flex items-center gap-1"><span className="text-sm">{trans.icon}</span><span className="text-[9px] font-semibold truncate">{trans.name}</span></div>
+                  <div className={previewClassForTransition(trans.id)}>
+                    {targetImage ? <img src={targetImage} alt="" referrerPolicy="no-referrer" className="cf-preview-image" /> : <div className="cf-preview-fallback">No media</div>}
+                  </div>
+                  <div className="mt-1 text-[9px] font-semibold truncate">{trans.name}</div>
                 </button>;
               })}
             </div>
           </div>
 
           <div className="pt-3 border-t border-[#222733]">
-            <div className="flex items-center gap-1.5 mb-2 text-[#00F0FF]"><Wand2 className="w-3.5 h-3.5" /><span className="text-[11px] font-bold">Effects</span><span className="text-[8px] text-[#64748B] ml-auto">Animated preview</span></div>
+            <div className="flex items-center gap-1.5 mb-2 text-[#00F0FF]"><Wand2 className="w-3.5 h-3.5" /><span className="text-[11px] font-bold">Effects</span><span className="text-[8px] text-[#64748B] ml-auto">Live clip preview</span></div>
             <div className="grid grid-cols-2 gap-2">
               {CREATOR_EFFECTS.map((effect) => {
                 const target = clips.find((c) => c.id === effectsTargetId);
                 const active = target?.effect === effect.id;
                 return <button key={effect.id} onClick={() => applyEffect(effectsTargetId, effect.id)} className={`p-1.5 rounded-lg border text-left transition-all ${active ? 'bg-[#00F0FF]/15 border-[#00F0FF] text-[#00F0FF]' : 'bg-[#171B24] border-[#262C3A] text-white hover:border-[#00F0FF]/60'}`}>
-                  <div className="cf-preview-stage"><div className="cf-preview-a"/><div className="cf-preview-b"/><div className="absolute inset-0 flex items-center justify-center text-lg">{effect.icon}</div></div>
+                  <div className={previewClassForEffect(effect.id)}>
+                    {targetImage ? <img src={targetImage} alt="" referrerPolicy="no-referrer" className="cf-preview-image" /> : <div className="cf-preview-fallback">No media</div>}
+                  </div>
                   <div className="mt-1 text-[9px] font-semibold truncate">{effect.name}</div>
                 </button>;
               })}
@@ -205,7 +239,7 @@ export const Timeline: React.FC<TimelineProps> = ({ tracks, clips, currentTime, 
                     return <React.Fragment key={clip.id}>
                       <div onClick={(e) => { e.stopPropagation(); onSelectClip(clip.id); }} onMouseDown={(e) => { e.stopPropagation(); onSelectClip(clip.id); setDraggingClipId(clip.id); setDragStartX(e.clientX); setDragInitialTime(clip.startTime); }} className={`absolute top-1 bottom-1 rounded-md overflow-hidden cursor-move transition-shadow flex items-center group select-none ${isSelected ? 'ring-2 ring-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.4)] z-10' : 'hover:ring-1 hover:ring-[#38BDF8]'} ${clip.type === 'video' ? 'bg-[#1E293B] border border-[#334155]' : clip.type === 'text' ? 'bg-[#854D0E] border border-[#CA8A04]' : clip.type === 'sticker' ? 'bg-[#831843] border border-[#DB2777]' : 'bg-[#064E3B] border border-[#059669]'}`} style={{ left: `${clipLeft}px`, width: `${clipWidth}px` }}>
                         <div onMouseDown={(e) => { e.stopPropagation(); setTrimmingHandle({ clipId: clip.id, type: 'start' }); }} className="absolute left-0 top-0 bottom-0 w-2.5 bg-white/20 hover:bg-[#00F0FF] cursor-ew-resize opacity-0 group-hover:opacity-100 z-20 flex items-center justify-center"><div className="w-0.5 h-3 bg-white rounded-full" /></div>
-                        <div className="flex items-center gap-1.5 px-2 w-full h-full overflow-hidden">{clip.thumbnail && <img src={clip.thumbnail} alt={clip.name} referrerPolicy="no-referrer" className="h-full aspect-video object-cover rounded pointer-events-none" />}<span className="text-[11px] font-semibold text-white truncate drop-shadow-sm">{clip.type === 'text' ? clip.text || clip.name : clip.name}</span>{clip.effect && clip.effect !== 'none' && <Sparkles className="w-3 h-3 text-[#00F0FF] shrink-0" title="Effect applied" />}<span className="text-[9px] font-mono text-white/70 ml-auto shrink-0">{clip.duration.toFixed(1)}s</span></div>
+                        <div className="flex items-center gap-1.5 px-2 w-full h-full overflow-hidden">{clip.thumbnail && <img src={clip.thumbnail} alt={clip.name} referrerPolicy="no-referrer" className="h-full aspect-video object-cover rounded pointer-events-none" />}<span className="text-[11px] font-semibold text-white truncate drop-shadow-sm">{clip.type === 'text' ? clip.text || clip.name : clip.name}</span>{clip.effect && clip.effect !== 'none' && <Wand2 className="w-3 h-3 text-[#00F0FF] shrink-0" title="Effect applied" />}<span className="text-[9px] font-mono text-white/70 ml-auto shrink-0">{clip.duration.toFixed(1)}s</span></div>
                         <div onMouseDown={(e) => { e.stopPropagation(); setTrimmingHandle({ clipId: clip.id, type: 'end' }); }} className="absolute right-0 top-0 bottom-0 w-2.5 bg-white/20 hover:bg-[#00F0FF] cursor-ew-resize opacity-0 group-hover:opacity-100 z-20 flex items-center justify-center"><div className="w-0.5 h-3 bg-white rounded-full" /></div>
                       </div>
                       {hasJunction && <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setEffectsTargetId(nextClip.id); }} className="cf-transition-plus absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 w-6 h-6 rounded-full bg-[#1B2430] border-2 border-[#CBD5E1] hover:border-[#00F0FF] hover:bg-[#00F0FF] hover:text-[#0B0D12] text-white flex items-center justify-center shadow-lg transition-all" style={{ left: `${junctionLeft}px` }} title="Transitions & Effects"><Plus className="w-3.5 h-3.5" /></button>}
@@ -221,5 +255,3 @@ export const Timeline: React.FC<TimelineProps> = ({ tracks, clips, currentTime, 
     </div>
   );
 };
-
-const LayersIcon = () => <span className="text-sm">🔀</span>;
